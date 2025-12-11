@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32-C3 IMU Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>ESP32-C3 IMU Dashboard</h1>
+            <p>Real-time MPU6050 sensor data via Bluetooth</p>
+        </header>
+
+        <!-- Connection Panel -->
+        <section class="connection-panel">
+            <h2>Device Connection</h2>
+            <div class="connection-controls">
+                <button id="connectBtn" class="connect-btn">Connect to ESP32C3_MPU6050</button>
+                <div class="connection-status">
+                    <span class="status-label">Status:</span>
+                    <span id="connectionStatus" class="status-value">Disconnected</span>
+                </div>
+            </div>
+            <div id="errorMessage" class="error-message hidden"></div>
+        </section>
+
+        <!-- Recording Panel -->
+        <section class="recording-panel">
+            <h2>Data Recording</h2>
+            <div class="recording-controls">
+                <button id="recordBtn" class="record-btn" disabled>Start Recording</button>
+                <button id="stopBtn" class="stop-btn" disabled>Stop Recording</button>
+                <div class="recording-status">
+                    <span class="status-label">Recording:</span>
+                    <span id="recordingStatus" class="status-value">Stopped</span>
+                    <span class="status-label">Samples:</span>
+                    <span id="sampleCount" class="status-value">0</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Live Data Panel -->
+        <section class="live-data-panel">
+            <h2>Live Sensor Data</h2>
+            <div class="data-grid">
+                <div class="data-group">
+                    <h3>Accelerometer (g)</h3>
+                    <div class="data-values">
+                        <div class="data-item">
+                            <span class="data-label">X:</span>
+                            <span id="accelX" class="data-value">0.000</span>
+                        </div>
+                        <div class="data-item">
+                            <span class="data-label">Y:</span>
+                            <span id="accelY" class="data-value">0.000</span>
+                        </div>
+                        <div class="data-item">
+                            <span class="data-label">Z:</span>
+                            <span id="accelZ" class="data-value">0.000</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="data-group">
+                    <h3>Gyroscope (°/s)</h3>
+                    <div class="data-values">
+                        <div class="data-item">
+                            <span class="data-label">X:</span>
+                            <span id="gyroX" class="data-value">0.000</span>
+                        </div>
+                        <div class="data-item">
+                            <span class="data-label">Y:</span>
+                            <span id="gyroY" class="data-value">0.000</span>
+                        </div>
+                        <div class="data-item">
+                            <span class="data-label">Z:</span>
+                            <span id="gyroZ" class="data-value">0.000</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="data-group">
+                    <h3>Raw Values</h3>
+                    <div class="data-values">
+                        <div class="data-item">
+                            <span class="data-label">Raw Data:</span>
+                            <span id="rawData" class="data-value">0,0,0,0,0,0</span>
+                        </div>
+                        <div class="data-item">
+                            <span class="data-label">Timestamp:</span>
+                            <span id="timestamp" class="data-value">--:--:--</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
