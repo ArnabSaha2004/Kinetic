@@ -1,190 +1,185 @@
-# BLE Arduino Controller - Expo App
+# Kinetic IMU Dashboard
 
-A cross-platform Expo application for connecting to and controlling Arduino devices via Bluetooth Low Energy (BLE).
+A complete React Native BLE application for real-time IMU data visualization from ESP32-C3 + MPU6050 sensors.
 
-## Features
+## 🚀 Features
 
-- 🔍 **Device Scanning**: Automatically scan for nearby BLE devices
-- 📱 **Cross-Platform**: Works on iOS and Android with Expo Development Build
-- 🎨 **Real-time Data**: Receive color data from Arduino in real-time
-- 🔗 **Easy Connection**: Simple tap-to-connect interface
-- 🛡️ **Permission Handling**: Automatic permission requests for different Android versions
-- 🎯 **Device Filtering**: Smart filtering to show only relevant Arduino devices
+- **Real-time BLE Communication**: Connects to ESP32-C3 devices via Bluetooth Low Energy
+- **IMU Data Visualization**: Live accelerometer and gyroscope data display
+- **Modern UI**: Clean design matching Kinetic brand guidelines with OKLCH color system
+- **Cross-platform**: Supports both Android and iOS (requires physical devices)
+- **Robust Error Handling**: Comprehensive null safety and connection management
+- **Development Build Ready**: Configured for EAS Build with proper BLE support
 
-## Prerequisites
+## 📱 Screenshots
 
-- **Physical Device Required**: BLE functionality requires a physical iOS or Android device
-- **Expo Development Build**: Cannot use Expo Go (react-native-ble-plx not included)
-- **Arduino Device**: Compatible Arduino with BLE capability (e.g., Arduino Uno R4 WiFi, ESP32)
+*Real-time IMU data streaming from ESP32-C3 + MPU6050 sensor*
 
-## Installation
+## 🛠 Tech Stack
 
-1. **Clone and Install Dependencies**
-   ```bash
-   npm install
-   # or
-   yarn install
-   ```
+- **React Native** 0.81.5 + **Expo SDK** 54
+- **TypeScript** with comprehensive type safety
+- **react-native-ble-plx** for Bluetooth Low Energy
+- **ESP32-C3** + **MPU6050** sensor integration
+- **EAS Build** for development builds
 
-2. **Generate Native Code**
-   ```bash
-   npx expo prebuild
-   ```
+## 🔧 Hardware Requirements
 
-3. **Create Development Build**
-   ```bash
-   # For Android
-   eas build --profile development --platform android
+- ESP32-C3 SuperMini (or compatible ESP32-C3 board)
+- MPU6050 6-axis IMU sensor
+- Physical Android/iOS device (BLE doesn't work on simulators)
 
-   # For iOS
-   eas build --profile development --platform ios
-   ```
-
-4. **Install Development Build** on your physical device
-
-## Arduino Setup
-
-Your Arduino device should implement a BLE service with these UUIDs:
-
-```cpp
-// Service UUID
-#define SERVICE_UUID "19b10000-e8f2-537e-4f6c-d104768a1214"
-
-// Characteristic UUID for color data
-#define COLOR_CHARACTERISTIC_UUID "19b10001-e8f2-537e-4f6c-d104768a1217"
+### Wiring (ESP32-C3 SuperMini)
+```
+MPU6050    ESP32-C3
+VCC    →   3.3V
+GND    →   GND
+SDA    →   GPIO 6
+SCL    →   GPIO 5
 ```
 
-### Supported Color Codes
+## 🚀 Quick Start
 
-The app recognizes these single-character color codes:
-- `B` → Blue
-- `R` → Red  
-- `G` → Green
-- `Y` → Yellow
-- `P` → Purple
-- `O` → Orange
-- Default → White
-
-## Usage
-
-1. **Launch the App** on your physical device
-2. **Grant Permissions** when prompted (Bluetooth and Location)
-3. **Scan for Devices** by tapping "Start Scanning"
-4. **Connect** by tapping on your Arduino device in the list
-5. **View Real-time Data** - the color indicator will update as your Arduino sends data
-
-## Configuration
-
-### Device Filtering
-
-Modify the device filtering logic in `hooks/useBLE.ts`:
-
-```typescript
-const isTargetDevice = 
-  deviceName.toLowerCase().includes('arduino') ||
-  deviceName.toLowerCase().includes('esp32') ||
-  deviceName.toLowerCase().includes('your-device-name') ||
-  device.serviceUUIDs?.includes(DATA_SERVICE_UUID);
+### 1. Clone and Install
+```bash
+git clone https://github.com/yourusername/kinetic-imu-dashboard.git
+cd kinetic-imu-dashboard
+npm install
 ```
 
-### BLE UUIDs
+### 2. Flash Arduino Code
+Upload `sketch.ino` to your ESP32-C3 using Arduino IDE:
+- Install ESP32 board support
+- Select "ESP32C3 Dev Module"
+- Install required libraries: `MPU6050`, `BLEDevice`
 
-Update the service and characteristic UUIDs in `hooks/useBLE.ts` to match your Arduino:
+### 3. Create Development Build
+```bash
+# Install EAS CLI
+npm install -g @expo/eas-cli
 
-```typescript
-const DATA_SERVICE_UUID = "your-service-uuid";
-const COLOR_CHARACTERISTIC_UUID = "your-characteristic-uuid";
+# Login to Expo
+eas login
+
+# Build for your platform
+eas build --profile development --platform android
+# or
+eas build --profile development --platform ios
 ```
 
-## Platform Support
+### 4. Install and Run
+- Download the development build from EAS dashboard
+- Install on your physical device
+- Start the development server:
+```bash
+npx expo start --dev-client
+```
 
-### iOS
-- ✅ Automatic permission handling
-- ✅ Background BLE support (limited time)
-- ✅ Full BLE functionality
+## 📊 Data Format
+
+The app receives IMU data in CSV format via BLE:
+```
+ax,ay,az,gx,gy,gz
+```
+Where:
+- `ax,ay,az`: Accelerometer values (raw ADC counts)
+- `gx,gy,gz`: Gyroscope values (raw ADC counts)
+
+Data is automatically converted to physical units:
+- **Accelerometer**: g-force (±2g range)
+- **Gyroscope**: degrees/second (±250°/s range)
+
+## 🔍 BLE Configuration
+
+- **Service UUID**: `12345678-1234-1234-1234-1234567890ab`
+- **Characteristic UUID**: `abcd1234-5678-90ab-cdef-1234567890ab`
+- **Device Name**: `Kinetic_IMU_Sensor`
+
+## 🎨 Design System
+
+The app uses the exact Kinetic design system with OKLCH colors converted to React Native compatible hex values:
+
+- **Background**: `#ffffff` (Pure white)
+- **Foreground**: `#252525` (Dark gray)
+- **Primary**: `#343434` (Darker gray)
+- **Chart Colors**: Amber, Blue, Indigo, Lime, Orange for data visualization
+
+## 📱 Platform Support
 
 ### Android
-- ✅ Android 11 and earlier (Location permission)
-- ✅ Android 12+ (Bluetooth Scan/Connect permissions)
-- ✅ Adaptive permission requests
+- Requires Android 6.0+ (API 23+)
+- Location permissions needed for BLE scanning
+- Different permissions for Android 12+ vs earlier versions
 
-### Web
-- ❌ Web Bluetooth API not implemented (could be added)
+### iOS
+- Requires iOS 13.0+
+- Bluetooth permissions handled automatically
+- Background BLE works for limited time
 
-## Development
+## 🔧 Development
 
-### Running in Development
-
-```bash
-# Start the development server
-npx expo start --dev-client
-
-# Run on specific platform
-npx expo start --android --dev-client
-npx expo start --ios --dev-client
+### Project Structure
+```
+├── App.tsx                 # Main app component
+├── hooks/
+│   └── useBLE.ts          # BLE functionality hook
+├── constants/
+│   └── BLEConstants.ts    # BLE UUIDs and configuration
+├── utils/
+│   └── BLEUtils.ts        # BLE utility functions
+├── components/            # UI components
+├── sketch.ino            # Arduino ESP32-C3 code
+└── docs/                 # Documentation
 ```
 
-### Building for Production
+### Key Features
+- **Data Packet Reconstruction**: Handles BLE fragmentation
+- **Connection Management**: Robust connect/disconnect handling
+- **Permission Handling**: Android 12+ and legacy support
+- **Error Boundaries**: Comprehensive error handling
+- **Real-time Updates**: Live data streaming and visualization
 
-```bash
-# Android
-eas build --platform android
-
-# iOS  
-eas build --platform ios
-```
-
-## Troubleshooting
+## 🐛 Troubleshooting
 
 ### Common Issues
 
 1. **"No devices found"**
-   - Ensure your Arduino is advertising with the correct name
-   - Check that BLE is enabled on your phone
-   - Verify location permissions are granted
+   - Ensure ESP32-C3 is powered and running BLE code
+   - Check location permissions are granted
+   - Verify Bluetooth is enabled
 
 2. **"Connection failed"**
-   - Make sure the Arduino isn't connected to another device
-   - Check that the service/characteristic UUIDs match
+   - Verify UUIDs match between app and Arduino
    - Try restarting both devices
+   - Ensure device isn't connected elsewhere
 
-3. **"Permission denied"**
-   - Go to phone Settings → Apps → [Your App] → Permissions
-   - Enable Location and Bluetooth permissions
+3. **"App crashes on connect"**
+   - Use development build (not Expo Go)
+   - Check that New Architecture is disabled
+   - Verify all permissions are granted
 
 ### Debug Mode
+Enable detailed logging by modifying `hooks/useBLE.ts` console.log statements.
 
-Enable detailed logging by adding to your Arduino code:
-```cpp
-Serial.println("BLE device connected");
-Serial.println("Sending color: " + colorCode);
-```
+## 📄 License
 
-## Architecture
+MIT License - see LICENSE file for details.
 
-```
-├── App.tsx                 # Main app component
-├── hooks/
-│   └── useBLE.ts          # BLE logic and state management
-├── app.json               # Expo configuration
-├── package.json           # Dependencies
-└── eas.json              # Build configuration
-```
-
-## Contributing
+## 🤝 Contributing
 
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
-4. Test on physical devices
+4. Add tests if applicable
 5. Submit a pull request
 
-## License
+## 📞 Support
 
-MIT License - see LICENSE file for details
+For issues and questions:
+- Check the troubleshooting section
+- Review EAS build logs for build issues
+- Ensure you're using a physical device (not simulator)
 
-## Acknowledgments
+---
 
-- Based on the tutorial by Daniel Friyia
-- Uses [react-native-ble-plx](https://github.com/dotintent/react-native-ble-plx) library
-- Expo team for the excellent development platform
+**Built with ❤️ for the Kinetic ecosystem**
