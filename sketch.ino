@@ -15,13 +15,16 @@ MPU6050 mpu;
 #define CHARACTERISTIC_UUID "abcd1234-5678-90ab-cdef-1234567890ab"
 
 BLECharacteristic *pCharacteristic;
+bool deviceConnected = false;
 
 // ------------ FIX: Correct BLE Callback Syntax ------------
 class MyServerCallbacks : public BLEServerCallbacks {
   void onConnect(BLEServer *server) {
+    deviceConnected = true;
     Serial.println("BLE Connected!");
   }
   void onDisconnect(BLEServer *server) {
+    deviceConnected = false;
     Serial.println("BLE Disconnected!");
   }
 };
@@ -51,7 +54,7 @@ void setup() {
   delay(500);
 
   // Initialize BLE
-  BLEDevice::init("ESP32C3_MPU6050");
+  BLEDevice::init("Kinetic_IMU_Sensor");
   BLEServer *server = BLEDevice::createServer();
   server->setCallbacks(new MyServerCallbacks());
 
@@ -87,11 +90,17 @@ void loop() {
   Serial.print(gy); Serial.print(",");
   Serial.println(gz);
 
-  // Send via BLE Notify
-  char buffer[64];
-  sprintf(buffer, "%d,%d,%d,%d,%d,%d", ax, ay, az, gx, gy, gz);
-  pCharacteristic->setValue(buffer);
-  pCharacteristic->notify();
+  // Send via BLE Notify with newline terminator (only if connected)
+  if (deviceConnected) {
+    char buffer[64];
+    sprintf(buffer, "%d,%d,%d,%d,%d,%d\n", ax, ay, az, gx, gy, gz);
+    pCharacteristic->setValue(buffer);
+    pCharacteristic->notify();
+    Serial.print("BLE SENT: ");
+    Serial.println(buffer);
+  } else {
+    Serial.println("No BLE client connected");
+  }
 
   delay(150);
 }

@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "BLE Arduino Controller",
-    "slug": "ble-arduino-controller",
+    "name": "Kinetic IMU Dashboard",
+    "slug": "kinetic-imu-dashboard",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
@@ -13,10 +13,13 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.yourcompany.blearduinocontroller"
+      "bundleIdentifier": "com.kinetic.imu.dashboard",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
-      "package": "com.yourcompany.blearduinocontroller",
+      "package": "com.kinetic.imu.dashboard",
       "permissions": [
         "android.permission.BLUETOOTH",
         "android.permission.BLUETOOTH_ADMIN",
@@ -32,10 +35,18 @@
         "react-native-ble-plx",
         {
           "isBackgroundEnabled": true,
-          "modes": ["peripheral", "central"],
+          "modes": [
+            "peripheral",
+            "central"
+          ],
           "bluetoothAlwaysPermission": "Allow $(PRODUCT_NAME) to connect to bluetooth devices"
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "6201bc77-d5f4-49af-99fc-a65350c639c6"
+      }
+    }
   }
 }

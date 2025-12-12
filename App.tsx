@@ -1,31 +1,215 @@
 import React, { useState } from 'react';
-import {
-  StyleSheet,
-  Text,
-  View,
-  TouchableOpacity,
-  FlatList,
-  Alert,
-  SafeAreaView,
-  ActivityIndicator,
-} from 'react-native';
-import { StatusBar } from 'expo-status-bar';
-import { Ionicons } from '@expo/vector-icons';
+import { Text, View, TouchableOpacity, StyleSheet } from 'react-native';
 import { Device } from 'react-native-ble-plx';
 import { useBLE } from './hooks/useBLE';
-import { DeviceItem } from './components/DeviceItem';
-import { ColorIndicator } from './components/ColorIndicator';
-import { ErrorBoundary } from './components/ErrorBoundary';
-import { BLETest } from './components/BLETest';
 
-function BLEApp() {
+// Kinetic Design System Colors (exact match from frontend globals.css)
+const colors = {
+  // Light theme colors (converted from OKLCH to hex)
+  background: '#ffffff',        // oklch(1 0 0)
+  foreground: '#252525',        // oklch(0.145 0 0)
+  card: '#ffffff',              // oklch(1 0 0)
+  cardForeground: '#252525',    // oklch(0.145 0 0)
+  primary: '#343434',           // oklch(0.205 0 0)
+  primaryForeground: '#fcfcfc', // oklch(0.985 0 0)
+  secondary: '#f8f8f8',         // oklch(0.97 0 0)
+  secondaryForeground: '#343434', // oklch(0.205 0 0)
+  muted: '#f8f8f8',             // oklch(0.97 0 0)
+  mutedForeground: '#8e8e8e',   // oklch(0.556 0 0)
+  accent: '#f8f8f8',            // oklch(0.97 0 0)
+  accentForeground: '#343434',  // oklch(0.205 0 0)
+  destructive: '#e11d48',       // oklch(0.577 0.245 27.325)
+  destructiveForeground: '#fcfcfc', // oklch(0.577 0.245 27.325)
+  border: '#ebebeb',            // oklch(0.922 0 0)
+  input: '#ebebeb',             // oklch(0.922 0 0)
+  ring: '#b5b5b5',              // oklch(0.708 0 0)
+  // Chart colors from frontend
+  chart1: '#f59e0b',            // oklch(0.646 0.222 41.116) - amber
+  chart2: '#3b82f6',            // oklch(0.6 0.118 184.704) - blue
+  chart3: '#6366f1',            // oklch(0.398 0.07 227.392) - indigo
+  chart4: '#84cc16',            // oklch(0.828 0.189 84.429) - lime
+  chart5: '#f97316',            // oklch(0.769 0.188 70.08) - orange
+  // Sidebar colors (for future use)
+  sidebar: '#fcfcfc',           // oklch(0.985 0 0)
+  sidebarForeground: '#252525', // oklch(0.145 0 0)
+  sidebarPrimary: '#343434',    // oklch(0.205 0 0)
+  sidebarBorder: '#ebebeb',     // oklch(0.922 0 0)
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+    padding: 20,
+    paddingTop: 50,
+  },
+  connectedContainer: {
+    flex: 1,
+    backgroundColor: colors.background,
+    padding: 20,
+    paddingTop: 50,
+  },
+  title: {
+    fontSize: 32,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 8,
+    color: colors.foreground,
+    letterSpacing: -0.8,
+  },
+  subtitle: {
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 32,
+    color: colors.mutedForeground,
+    fontWeight: '400',
+  },
+  statusText: {
+    marginBottom: 32,
+    textAlign: 'center',
+    color: colors.mutedForeground,
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  dataCard: {
+    backgroundColor: colors.card,
+    padding: 24,
+    borderRadius: 10, // Using --radius: 0.625rem = 10px
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  dataCardTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    marginBottom: 16,
+    color: colors.foreground,
+  },
+  dataRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 16,
+  },
+  dataValue: {
+    color: colors.foreground,
+    fontWeight: '600',
+    fontSize: 16,
+    fontFamily: 'monospace',
+    flex: 1,
+    textAlign: 'center',
+  },
+  rawDataText: {
+    fontSize: 14,
+    marginBottom: 8,
+    color: colors.mutedForeground,
+    fontFamily: 'monospace',
+    lineHeight: 20,
+  },
+  primaryButton: {
+    backgroundColor: colors.primary,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginBottom: 20,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  primaryButtonDisabled: {
+    backgroundColor: colors.muted,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  primaryButtonText: {
+    color: colors.primaryForeground,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  primaryButtonTextDisabled: {
+    color: colors.mutedForeground,
+  },
+  destructiveButton: {
+    backgroundColor: colors.destructive,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    alignItems: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  destructiveButtonDisabled: {
+    backgroundColor: colors.muted,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  destructiveButtonText: {
+    color: colors.destructiveForeground,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  deviceCard: {
+    backgroundColor: colors.card,
+    padding: 20,
+    borderRadius: 8,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+    minWidth: 300,
+  },
+  deviceName: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.foreground,
+    marginBottom: 6,
+  },
+  deviceId: {
+    fontSize: 12,
+    color: colors.mutedForeground,
+    fontFamily: 'monospace',
+    opacity: 0.8,
+  },
+  emptyState: {
+    textAlign: 'center',
+    fontSize: 14,
+    color: colors.mutedForeground,
+    marginTop: 40,
+    lineHeight: 22,
+    paddingHorizontal: 20,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: colors.primary,
+    marginTop: 32,
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+});
+
+export default function App() {
   const {
     requestPermissions,
     scanForPeripherals,
     allDevices,
     connectToDevice,
     connectedDevice,
-    color,
+    imuData,
     disconnectFromDevice,
     isScanning,
     isReady,
@@ -33,296 +217,174 @@ function BLEApp() {
   } = useBLE();
 
   const [isLoading, setIsLoading] = useState(false);
+  const [isDisconnecting, setIsDisconnecting] = useState(false);
+
+  // Add logging to track component lifecycle
+  React.useEffect(() => {
+    console.log('📱 App component mounted');
+    return () => {
+      console.log('📱 App component unmounting');
+    };
+  }, []);
+
+  React.useEffect(() => {
+    console.log('📱 Connected device changed:', connectedDevice?.name || 'null');
+  }, [connectedDevice]);
 
   const scanForDevices = async () => {
-    if (hasError) {
-      Alert.alert(
-        'BLE Initialization Error',
-        'Bluetooth Low Energy failed to initialize. This usually happens when:\n\n' +
-        '1. New Architecture is enabled (should be disabled)\n' +
-        '2. App is running on simulator (use physical device)\n' +
-        '3. Native module not properly linked\n\n' +
-        'Try rebuilding the app with: npx expo prebuild --clean'
-      );
-      return;
-    }
-
-    if (!isReady) {
-      Alert.alert(
-        'BLE Not Ready',
-        'Bluetooth Low Energy is still initializing. Please wait a moment and try again.'
-      );
-      return;
-    }
-
+    if (!isReady) return;
     const isPermissionsEnabled = await requestPermissions();
     if (isPermissionsEnabled) {
       scanForPeripherals();
-    } else {
-      Alert.alert(
-        'Permission Required',
-        'Bluetooth permissions are required to scan for devices.'
-      );
     }
   };
 
-  const handleConnectToDevice = async (device: Device) => {
+  const handleConnect = async (device: Device) => {
     setIsLoading(true);
     try {
       await connectToDevice(device);
     } catch (error) {
-      Alert.alert('Connection Error', 'Failed to connect to device');
+      console.log('Connection failed:', error);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleDisconnect = () => {
-    disconnectFromDevice();
+  const handleDisconnect = async () => {
+    setIsDisconnecting(true);
+    try {
+      await new Promise(resolve => setTimeout(resolve, 100)); // Small delay to prevent race conditions
+      disconnectFromDevice();
+    } catch (error) {
+      console.log('Disconnect failed:', error);
+    } finally {
+      setTimeout(() => {
+        setIsDisconnecting(false);
+      }, 500); // Give time for cleanup
+    }
   };
 
-  const renderDeviceItem = ({ item }: { item: Device }) => (
-    <DeviceItem
-      device={item}
-      onPress={handleConnectToDevice}
-      isConnecting={isLoading}
-    />
-  );
+  // Helper function to safely format numbers
+  const formatValue = (value: number): string => {
+    if (isNaN(value) || !isFinite(value)) {
+      return 'NaN';
+    }
+    return value.toFixed(3);
+  };
 
   if (connectedDevice) {
     return (
-      <SafeAreaView style={styles.container}>
-        <StatusBar style="auto" />
-        <View style={styles.connectedContainer}>
-          <View style={styles.header}>
-            <Ionicons name="bluetooth" size={24} color="#34C759" />
-            <Text style={styles.title}>Connected</Text>
+      <View style={styles.connectedContainer}>
+        <Text style={styles.title}>
+          Kinetic IMU Dashboard
+        </Text>
+        <Text style={styles.subtitle}>
+          Connected: {connectedDevice.name || 'Kinetic Device'}
+        </Text>
+        
+        {/* Accelerometer Data */}
+        <View style={styles.dataCard}>
+          <Text style={[styles.dataCardTitle, { color: colors.chart2 }]}>Accelerometer (g)</Text>
+          <View style={styles.dataRow}>
+            <Text style={styles.dataValue}>X: {formatValue(imuData.accelerometer.x)}</Text>
+            <Text style={styles.dataValue}>Y: {formatValue(imuData.accelerometer.y)}</Text>
+            <Text style={styles.dataValue}>Z: {formatValue(imuData.accelerometer.z)}</Text>
           </View>
-          
-          <Text style={styles.deviceInfo}>
-            {connectedDevice.name || connectedDevice.localName || 'Arduino Device'}
-          </Text>
-          
-          <ColorIndicator color={color} isConnected={true} />
-
-          <TouchableOpacity style={styles.disconnectButton} onPress={handleDisconnect}>
-            <Ionicons name="close-circle-outline" size={20} color="#fff" />
-            <Text style={styles.buttonText}>Disconnect</Text>
-          </TouchableOpacity>
         </View>
-      </SafeAreaView>
+
+        {/* Gyroscope Data */}
+        <View style={styles.dataCard}>
+          <Text style={[styles.dataCardTitle, { color: colors.chart4 }]}>Gyroscope (°/s)</Text>
+          <View style={styles.dataRow}>
+            <Text style={styles.dataValue}>X: {formatValue(imuData.gyroscope.x)}</Text>
+            <Text style={styles.dataValue}>Y: {formatValue(imuData.gyroscope.y)}</Text>
+            <Text style={styles.dataValue}>Z: {formatValue(imuData.gyroscope.z)}</Text>
+          </View>
+        </View>
+
+        {/* Raw Data */}
+        <View style={styles.dataCard}>
+          <Text style={[styles.dataCardTitle, { color: colors.chart1 }]}>Raw Values</Text>
+          <Text style={styles.rawDataText}>Raw Data: {imuData.rawData}</Text>
+          <Text style={styles.rawDataText}>Timestamp: {imuData.timestamp}</Text>
+        </View>
+
+        {/* Raw Individual Values */}
+        <View style={styles.dataCard}>
+          <Text style={styles.dataCardTitle}>Raw Sensor Values</Text>
+          <Text style={styles.rawDataText}>Accel: {imuData.raw.ax}, {imuData.raw.ay}, {imuData.raw.az}</Text>
+          <Text style={styles.rawDataText}>Gyro: {imuData.raw.gx}, {imuData.raw.gy}, {imuData.raw.gz}</Text>
+        </View>
+
+        <TouchableOpacity
+          style={[
+            styles.destructiveButton,
+            isDisconnecting && styles.destructiveButtonDisabled
+          ]}
+          onPress={handleDisconnect}
+          disabled={isDisconnecting}
+        >
+          <Text style={styles.destructiveButtonText}>
+            {isDisconnecting ? 'Disconnecting...' : 'Disconnect'}
+          </Text>
+        </TouchableOpacity>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar style="auto" />
-      <View style={styles.content}>
-        <BLETest />
-        <Text style={styles.title}>BLE Arduino Controller</Text>
-        <Text style={styles.subtitle}>
-          Scan for and connect to your Arduino device
+    <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+      <Text style={styles.title}>
+        Kinetic Device Scanner
+      </Text>
+      
+      <Text style={styles.statusText}>
+        Status: {hasError ? '❌ Error' : isReady ? '✅ Ready' : '⏳ Loading...'}
+      </Text>
+
+      <TouchableOpacity
+        style={[
+          styles.primaryButton,
+          !isReady && styles.primaryButtonDisabled
+        ]}
+        onPress={scanForDevices}
+        disabled={!isReady}
+      >
+        <Text style={[
+          styles.primaryButtonText,
+          !isReady && styles.primaryButtonTextDisabled
+        ]}>
+          {isScanning ? 'Scanning...' : 'Scan for Kinetic Devices'}
         </Text>
+      </TouchableOpacity>
 
+      {allDevices.map((device, index) => (
         <TouchableOpacity
-          style={[styles.scanButton, (isScanning || !isReady || hasError) && styles.scanningButton]}
-          onPress={scanForDevices}
-          disabled={isScanning || (!isReady && !hasError)}
+          key={device.id}
+          style={styles.deviceCard}
+          onPress={() => handleConnect(device)}
+          disabled={isLoading}
         >
-          {hasError ? (
-            <>
-              <Ionicons name="warning-outline" size={20} color="#fff" />
-              <Text style={[styles.buttonText, { marginLeft: 8 }]}>BLE Error - Tap for Info</Text>
-            </>
-          ) : !isReady ? (
-            <>
-              <ActivityIndicator color="#fff" size="small" />
-              <Text style={[styles.buttonText, { marginLeft: 8 }]}>Initializing BLE...</Text>
-            </>
-          ) : isScanning ? (
-            <>
-              <ActivityIndicator color="#fff" size="small" />
-              <Text style={[styles.buttonText, { marginLeft: 8 }]}>Scanning...</Text>
-            </>
-          ) : (
-            <>
-              <Ionicons name="search" size={20} color="#fff" />
-              <Text style={[styles.buttonText, { marginLeft: 8 }]}>
-                {allDevices.length > 0 ? 'Scan Again' : 'Start Scanning'}
-              </Text>
-            </>
-          )}
+          <Text style={styles.deviceName}>
+            {device.name || device.localName || `Kinetic Device ${index + 1}`}
+          </Text>
+          <Text style={styles.deviceId}>
+            {device.id}
+          </Text>
         </TouchableOpacity>
+      ))}
 
-        {allDevices.length > 0 ? (
-          <View style={styles.deviceList}>
-            <View style={styles.deviceListHeader}>
-              <Ionicons name="bluetooth-outline" size={20} color="#333" />
-              <Text style={styles.deviceListTitle}>Available Devices ({allDevices.length})</Text>
-            </View>
-            <FlatList
-              data={allDevices}
-              renderItem={renderDeviceItem}
-              keyExtractor={(item) => item.id}
-              style={styles.list}
-              showsVerticalScrollIndicator={false}
-            />
-          </View>
-        ) : !isScanning && (
-          <View style={styles.emptyState}>
-            <Ionicons name="bluetooth-outline" size={64} color="#ccc" />
-            <Text style={styles.emptyStateText}>No devices found</Text>
-            <Text style={styles.emptyStateSubtext}>
-              Make sure your Arduino is powered on and advertising
-            </Text>
-          </View>
-        )}
-
-        {isLoading && (
-          <View style={styles.loadingOverlay}>
-            <ActivityIndicator size="large" color="#007AFF" />
-            <Text style={styles.loadingText}>Connecting...</Text>
-          </View>
-        )}
-      </View>
-    </SafeAreaView>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f8f9fa',
-  },
-  content: {
-    flex: 1,
-    padding: 20,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-    marginLeft: 8,
-  },
-  subtitle: {
-    fontSize: 16,
-    textAlign: 'center',
-    marginBottom: 30,
-    color: '#666',
-    lineHeight: 22,
-  },
-  scanButton: {
-    backgroundColor: '#007AFF',
-    padding: 16,
-    borderRadius: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 24,
-    elevation: 2,
-    shadowColor: '#007AFF',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-  },
-  scanningButton: {
-    backgroundColor: '#6c757d',
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  deviceList: {
-    flex: 1,
-  },
-  deviceListHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  deviceListTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-    marginLeft: 8,
-  },
-  list: {
-    flex: 1,
-  },
-  emptyState: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 40,
-  },
-  emptyStateText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#666',
-    marginTop: 16,
-    textAlign: 'center',
-  },
-  emptyStateSubtext: {
-    fontSize: 14,
-    color: '#999',
-    marginTop: 8,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  connectedContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  deviceInfo: {
-    fontSize: 18,
-    color: '#666',
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  disconnectButton: {
-    backgroundColor: '#FF3B30',
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-    borderRadius: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 2,
-    shadowColor: '#FF3B30',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-  },
-  loadingOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    color: '#fff',
-    marginTop: 12,
-    fontSize: 16,
-    fontWeight: '500',
-  },
-});
-
-export default function App() {
-  return (
-    <ErrorBoundary>
-      <BLEApp />
-    </ErrorBoundary>
+      {isLoading && (
+        <Text style={styles.loadingText}>
+          Connecting to device...
+        </Text>
+      )}
+      
+      {allDevices.length === 0 && !isScanning && isReady && (
+        <Text style={styles.emptyState}>
+          No Kinetic devices found.{'\n'}Make sure your device is powered on and advertising.
+        </Text>
+      )}
+    </View>
   );
 }
