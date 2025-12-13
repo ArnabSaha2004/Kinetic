@@ -1,19 +1,6 @@
-[00:00:00.904] Server  LOG     
-[00:00:00.904] Server  LOG        We detected TypeScript in your project and reconfigured your tsconfig.json file for you.
-[00:00:00.905] Server  LOG        The following suggested values were added to your tsconfig.json. These values can be changed to fit your project's needs:
-
-[00:00:00.905] Server  LOG        	- include was updated to add '.next/dev/types/**/*.ts'
-[00:00:00.906] Server  LOG     
-[00:00:00.906] Server  LOG        The following mandatory changes were made to your tsconfig.json:
-
-[00:00:00.906] Server  LOG        	- jsx was set to react-jsx (next.js uses the React automatic runtime)
-[00:00:00.907] Server  LOG     
-[00:00:01.090] Server  LOG      ✓ Ready in 725ms
-[00:02:56.291] Server  LOG      ○ Compiling / ...
-[00:02:59.174] Server  WARN     ⚠ Cross origin request detected from 10.183.128.19 to /_next/* resource. In a future major version of Next.js, you will need to explicitly configure "allowedDevOrigins" in next.config to allow this.
-Read more: https://nextjs.org/docs/app/api-reference/config/next-config-js/allowedDevOrigins
-[00:02:59.263] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
-[00:02:59.533] Browser ERROR   A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+[00:00:28.053] Server  LOG      ✓ Ready in 16.2s
+[00:00:40.103] Server  LOG      ○ Compiling / ...
+[00:00:56.784] Browser ERROR   A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
 
 - A server/client branch `if (typeof window !== 'undefined')`.
 - Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
@@ -36,23 +23,20 @@ It can also happen if the client has a browser extension installed which messes 
                 <RedirectErrorBoundary router={{...}}>
                   <Head>
                   <__next_root_layout_boundary__>
-                    <SegmentViewNode type="layout" pagePath="/frontend/...">
+                    <SegmentViewNode type="layout" pagePath="/Documents...">
                       <SegmentTrieNode>
                       <link>
                       <script>
                       <script>
                       <RootLayout>
-                        <html
-                          lang="en"
-                          className="dark"
--                         data-be-installed="true"
-                        >
+                        <html lang="en" className="dark">
                           <body
                             className="font-sans antialiased"
--                           data-liner-extension-version="7.18.1"
+-                           data-new-gr-c-s-check-loaded="14.1266.0"
+-                           data-gr-ext-installed=""
                           >
                   ...
 
-[00:03:00.028] Browser LOG     %c[Vercel Web Analytics]%c Debug mode is enabled by default in development. No requests will be sent to the server. color: rgb(120, 120, 120) color: inherit
-[00:03:00.028] Browser LOG     %c[Vercel Web Analytics]%c Running queued event color: rgb(120, 120, 120) color: inherit pageview {"path":"/","route":"/"}
-[00:03:00.028] Browser LOG     %c[Vercel Web Analytics]%c [pageview] http://10.183.128.19:3000/ color: rgb(120, 120, 120) color: inherit {"dp":"/","o":"http://10.183.128.19:3000/","r":"","sdkn":"@vercel/analytics/next","sdkv":"1.3.1","sv":"0.1.3","ts":1765507446434}
+[00:00:57.562] Browser LOG     %c[Vercel Web Analytics]%c Debug mode is enabled by default in development. No requests will be sent to the server. color: rgb(120, 120, 120) color: inherit
+[00:00:57.562] Browser LOG     %c[Vercel Web Analytics]%c Running queued event color: rgb(120, 120, 120) color: inherit pageview {"path":"/","route":"/"}
+[00:00:57.562] Browser LOG     %c[Vercel Web Analytics]%c [pageview] http://localhost:3000/ color: rgb(120, 120, 120) color: inherit {"dp":"/","o":"http://localhost:3000/","r":"","sdkn":"@vercel/analytics/next","sdkv":"1.3.1","sv":"0.1.3","ts":1765619087573}

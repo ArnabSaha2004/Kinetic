@@ -37,6 +37,8 @@ interface IMUData {
   };
   timestamp: string;
   rawData: string;
+  isStale: boolean; // New field to track if data is stale
+  lastUpdateTime: number; // Timestamp of last data update
 }
 
 interface BLEApi {
@@ -44,6 +46,7 @@ interface BLEApi {
   scanForPeripherals(): void;
   connectToDevice(deviceId: Device): Promise<void>;
   disconnectFromDevice(): void;
+  reconnectToLastDevice(): void;
   allDevices: Device[];
   connectedDevice: Device | null;
   imuData: IMUData;
@@ -60,11 +63,14 @@ export function useBLE(): BLEApi {
     gyroscope: { x: 0, y: 0, z: 0 },
     raw: { ax: 0, ay: 0, az: 0, gx: 0, gy: 0, gz: 0 },
     timestamp: '--:--:--',
-    rawData: '0,0,0,0,0,0'
+    rawData: '0,0,0,0,0,0',
+    isStale: false,
+    lastUpdateTime: Date.now()
   });
   const [isScanning, setIsScanning] = useState<boolean>(false);
   const [isReady, setIsReady] = useState<boolean>(false);
   const [hasError, setHasError] = useState<boolean>(false);
+
   
   // Use ref to store BLE manager instance, data buffer, and subscription
   const bleManagerRef = useRef<BleManager | null>(null);
@@ -72,6 +78,9 @@ export function useBLE(): BLEApi {
   const subscriptionRef = useRef<any>(null);
   const isMountedRef = useRef<boolean>(true);
   const isConnectingRef = useRef<boolean>(false);
+  const staleDataTimerRef = useRef<number | null>(null);
+  const lastDataTimeRef = useRef<number>(Date.now());
+  const lastConnectedDeviceRef = useRef<Device | null>(null);
 
   // Request Android 12+ (API 31+) permissions
   const requestAndroid31Permissions = async (): Promise<boolean> => {
@@ -129,6 +138,71 @@ export function useBLE(): BLEApi {
     }
   };
 
+  // Stale data detection - mark data as stale if no updates for 3 seconds
+  const checkForStaleData = () => {
+    try {
+      if (!isMountedRef.current) {
+        return; // Component unmounted, skip check
+      }
+
+      const now = Date.now();
+      const timeSinceLastUpdate = now - lastDataTimeRef.current;
+      
+      if (timeSinceLastUpdate > 3000) { // 3 seconds threshold
+        console.warn('⚠️ Data appears stale - no updates for', timeSinceLastUpdate, 'ms');
+        
+        // Only update state if component is still mounted and setImuData is available
+        if (isMountedRef.current && typeof setImuData === 'function') {
+          setImuData(prevData => {
+            // Additional null check on prevData
+            if (!prevData) {
+              return {
+                accelerometer: { x: 0, y: 0, z: 0 },
+                gyroscope: { x: 0, y: 0, z: 0 },
+                raw: { ax: 0, ay: 0, az: 0, gx: 0, gy: 0, gz: 0 },
+                timestamp: '--:--:--',
+                rawData: '0,0,0,0,0,0',
+                isStale: true,
+                lastUpdateTime: now
+              };
+            }
+            
+            // If data just became stale, just mark it - let user manually reconnect
+            if (!prevData.isStale) {
+              console.log('⚠️ Data became stale - manual reconnection available');
+            }
+            
+            return {
+              ...prevData,
+              isStale: true
+            };
+          });
+        }
+      }
+    } catch (staleCheckError: any) {
+      console.warn('⚠️ Error in stale data check:', staleCheckError?.message || 'Unknown error');
+    }
+  };
+
+  // Start stale data monitoring when connected
+  const startStaleDataMonitoring = () => {
+    if (staleDataTimerRef.current) {
+      clearInterval(staleDataTimerRef.current);
+    }
+    
+    staleDataTimerRef.current = setInterval(checkForStaleData, 1000); // Check every second
+    console.log('🕐 Started stale data monitoring');
+  };
+
+  // Stop stale data monitoring
+  const stopStaleDataMonitoring = () => {
+    if (staleDataTimerRef.current) {
+      clearInterval(staleDataTimerRef.current);
+      staleDataTimerRef.current = null;
+      console.log('🕐 Stopped stale data monitoring');
+    }
+  };
+
   // Initialize BLE manager and validation
   useEffect(() => {
     const initializeBLE = async () => {
@@ -168,6 +242,7 @@ export function useBLE(): BLEApi {
     
     // Cleanup on unmount
     return () => {
+      stopStaleDataMonitoring();
       if (bleManagerRef.current) {
         try {
           bleManagerRef.current.destroy();
@@ -289,16 +364,19 @@ export function useBLE(): BLEApi {
       }
 
       // Convert to physical units with safeguards
-      const ax = (isFinite(rawValues[0]) && isFinite(ACCEL_SCALE) && ACCEL_SCALE !== 0) ? rawValues[0] / ACCEL_SCALE : 0;
-      const ay = (isFinite(rawValues[1]) && isFinite(ACCEL_SCALE) && ACCEL_SCALE !== 0) ? rawValues[1] / ACCEL_SCALE : 0;
-      const az = (isFinite(rawValues[2]) && isFinite(ACCEL_SCALE) && ACCEL_SCALE !== 0) ? rawValues[2] / ACCEL_SCALE : 0;
-      const gx = (isFinite(rawValues[3]) && isFinite(GYRO_SCALE) && GYRO_SCALE !== 0) ? rawValues[3] / GYRO_SCALE : 0;
-      const gy = (isFinite(rawValues[4]) && isFinite(GYRO_SCALE) && GYRO_SCALE !== 0) ? rawValues[4] / GYRO_SCALE : 0;
-      const gz = (isFinite(rawValues[5]) && isFinite(GYRO_SCALE) && GYRO_SCALE !== 0) ? rawValues[5] / GYRO_SCALE : 0;
+      const ax = isFinite(rawValues[0]) ? rawValues[0] / ACCEL_SCALE : 0;
+      const ay = isFinite(rawValues[1]) ? rawValues[1] / ACCEL_SCALE : 0;
+      const az = isFinite(rawValues[2]) ? rawValues[2] / ACCEL_SCALE : 0;
+      const gx = isFinite(rawValues[3]) ? rawValues[3] / GYRO_SCALE : 0;
+      const gy = isFinite(rawValues[4]) ? rawValues[4] / GYRO_SCALE : 0;
+      const gz = isFinite(rawValues[5]) ? rawValues[5] / GYRO_SCALE : 0;
       
       // Update IMU data state only if component is mounted and setImuData is available
       if (isMountedRef.current && typeof setImuData === 'function') {
         try {
+          const now = Date.now();
+          lastDataTimeRef.current = now; // Update last data time
+          
           setImuData({
             accelerometer: { x: ax, y: ay, z: az },
             gyroscope: { x: gx, y: gy, z: gz },
@@ -311,7 +389,9 @@ export function useBLE(): BLEApi {
               gz: rawValues[5] || 0 
             },
             timestamp: new Date().toLocaleTimeString(),
-            rawData: trimmedData
+            rawData: trimmedData,
+            isStale: false, // Reset stale flag on new data
+            lastUpdateTime: now
           });
           
           console.log('✅ IMU data updated - Accel:', { 
@@ -335,92 +415,173 @@ export function useBLE(): BLEApi {
     error: BleError | null,
     characteristic: Characteristic | null
   ): void => {
+    const updateId = Math.random().toString(36).slice(2, 8);
+    
     try {
       // Check if component is still mounted
       if (!isMountedRef.current) {
-        console.log('🔍 Component unmounted, ignoring data update');
+        console.log(`📦 [${updateId}] Component unmounted, ignoring data update`);
         return;
       }
 
       if (error) {
-        console.log('Data update error:', error);
+        console.log(`📦 [${updateId}] Data update error:`, error?.message || 'Unknown error');
         return;
       } 
       
-      if (!characteristic || !characteristic.value) {
-        console.log('No data was received - characteristic or value is null');
+      if (!characteristic) {
+        console.log(`📦 [${updateId}] No characteristic received`);
+        return;
+      }
+      
+      if (!characteristic.value) {
+        console.log(`📦 [${updateId}] No characteristic value received`);
         return;
       }
 
-      const decodedData = safeBase64Decode(characteristic.value);
+      console.log(`📦 [${updateId}] Processing data update...`);
+      
+      let decodedData: string | null = null;
+      try {
+        decodedData = safeBase64Decode(characteristic.value);
+        console.log(`📦 [${updateId}] Decoded data:`, decodedData);
+      } catch (decodeError: any) {
+        console.error(`📦 [${updateId}] Error decoding data:`, decodeError?.message || 'Unknown error');
+        return;
+      }
+      
       if (decodedData && typeof decodedData === 'string') {
-        console.log('📦 Received fragment:', decodedData);
+        console.log(`📦 [${updateId}] Received fragment:`, decodedData);
         
         // Add to buffer with null safety
         try {
-          if (dataBufferRef.current !== undefined) {
+          console.log(`📦 [${updateId}] Current buffer length: ${dataBufferRef.current?.length || 0}`);
+          
+          if (dataBufferRef.current !== undefined && dataBufferRef.current !== null) {
             dataBufferRef.current += decodedData;
           } else {
+            console.log(`📦 [${updateId}] Buffer was null/undefined, initializing with new data`);
             dataBufferRef.current = decodedData;
           }
-        } catch (bufferError) {
-          console.error('Error updating buffer:', bufferError);
+          
+          console.log(`📦 [${updateId}] Buffer updated, new length: ${dataBufferRef.current?.length || 0}`);
+        } catch (bufferError: any) {
+          console.error(`📦 [${updateId}] Error updating buffer:`, bufferError?.message || 'Unknown error');
+          console.error(`� [ ${updateId}] Buffer error stack:`, bufferError?.stack || 'No stack');
           dataBufferRef.current = decodedData; // Reset buffer
+          console.log(`📦 [${updateId}] Buffer reset with new data`);
         }
         
         // Try to find complete 6-value packets in the buffer
-        // Look for patterns that have exactly 6 comma-separated values
-        const allValues = dataBufferRef.current.split(',');
+        console.log(`📦 [${updateId}] Processing buffer for complete packets...`);
+        
+        let allValues: string[] = [];
+        try {
+          if (dataBufferRef.current && typeof dataBufferRef.current === 'string') {
+            allValues = dataBufferRef.current.split(',');
+            console.log(`📦 [${updateId}] Split buffer into ${allValues.length} values`);
+          } else {
+            console.warn(`📦 [${updateId}] Buffer is not a string: ${typeof dataBufferRef.current}`);
+            return;
+          }
+        } catch (splitError: any) {
+          console.error(`📦 [${updateId}] Error splitting buffer:`, splitError?.message || 'Unknown error');
+          return;
+        }
         
         if (allValues && Array.isArray(allValues) && allValues.length >= 6) {
+          console.log(`📦 [${updateId}] Found ${allValues.length} values, processing packets...`);
+          
           // Process complete 6-value packets
           let processedValues = 0;
           
           while (processedValues + 5 < allValues.length) {
-            const packet = allValues.slice(processedValues, processedValues + 6);
-            
-            // Validate all values are numeric
-            const isValidPacket = packet.every(val => {
-              const trimmed = val.trim();
-              return trimmed && !isNaN(parseInt(trimmed));
-            });
-            
-            if (isValidPacket) {
-              const packetString = packet.join(',');
-              console.log('🔄 Processing complete packet:', packetString);
-              processIMUData(packetString);
-              processedValues += 6;
-            } else {
-              // Skip invalid value and try next position
-              processedValues += 1;
+            try {
+              const packet = allValues.slice(processedValues, processedValues + 6);
+              console.log(`📦 [${updateId}] Checking packet at position ${processedValues}:`, packet);
+              
+              // Validate all values are numeric
+              const isValidPacket = packet.every((val, index) => {
+                try {
+                  if (val === null || val === undefined) {
+                    console.warn(`📦 [${updateId}] Packet value at index ${index} is null/undefined`);
+                    return false;
+                  }
+                  const trimmed = String(val).trim();
+                  const isValid = trimmed && !isNaN(parseInt(trimmed));
+                  if (!isValid) {
+                    console.warn(`📦 [${updateId}] Invalid packet value at index ${index}: "${val}" -> "${trimmed}"`);
+                  }
+                  return isValid;
+                } catch (validationError: any) {
+                  console.error(`📦 [${updateId}] Error validating packet value at index ${index}:`, validationError?.message || 'Unknown error');
+                  return false;
+                }
+              });
+              
+              if (isValidPacket) {
+                const packetString = packet.join(',');
+                console.log(`📦 [${updateId}] Processing valid packet:`, packetString);
+                
+                try {
+                  processIMUData(packetString);
+                  console.log(`📦 [${updateId}] Packet processed successfully`);
+                } catch (processError: any) {
+                  console.error(`📦 [${updateId}] Error processing packet:`, processError?.message || 'Unknown error');
+                }
+                
+                processedValues += 6;
+              } else {
+                console.log(`📦 [${updateId}] Invalid packet, skipping to next position`);
+                // Skip invalid value and try next position
+                processedValues += 1;
+              }
+            } catch (packetError: any) {
+              console.error(`📦 [${updateId}] Error processing packet at position ${processedValues}:`, packetError?.message || 'Unknown error');
+              processedValues += 1; // Skip this position
             }
           }
           
           // Keep remaining values in buffer
           if (processedValues > 0) {
-            const remainingValues = allValues.slice(processedValues);
-            dataBufferRef.current = remainingValues.join(',');
-            console.log('📦 Buffer updated, remaining values:', remainingValues.length);
+            try {
+              const remainingValues = allValues.slice(processedValues);
+              dataBufferRef.current = remainingValues.join(',');
+              console.log(`📦 [${updateId}] Buffer updated, remaining values: ${remainingValues.length}`);
+            } catch (remainingError: any) {
+              console.error(`📦 [${updateId}] Error updating remaining buffer:`, remainingError?.message || 'Unknown error');
+              dataBufferRef.current = ''; // Clear buffer on error
+            }
           }
         } else {
-          console.log('📦 Buffer has', allValues?.length || 0, 'values, waiting for more...');
+          console.log(`📦 [${updateId}] Buffer has ${allValues?.length || 0} values, waiting for more...`);
         }
         
         // Clear buffer if it gets too long (prevent memory issues)
-        if (dataBufferRef.current && dataBufferRef.current.length > 200) {
-          console.warn('🧹 Buffer cleared (too long)');
-          dataBufferRef.current = '';
+        try {
+          if (dataBufferRef.current && dataBufferRef.current.length > 200) {
+            console.warn(`📦 [${updateId}] Buffer too long (${dataBufferRef.current.length} chars), clearing...`);
+            dataBufferRef.current = '';
+          }
+        } catch (lengthCheckError: any) {
+          console.error(`📦 [${updateId}] Error checking buffer length:`, lengthCheckError?.message || 'Unknown error');
+          dataBufferRef.current = ''; // Clear buffer on error
         }
       } else {
-        console.log('No valid decoded data received');
+        console.log(`📦 [${updateId}] No valid decoded data received`);
       }
     } catch (updateError: any) {
-      console.error('Error in onDataUpdate:', updateError?.message || 'Unknown error');
+      console.error(`📦 [${updateId}] CRITICAL ERROR in onDataUpdate:`, updateError?.message || 'Unknown error');
+      console.error(`📦 [${updateId}] Update error stack:`, updateError?.stack || 'No stack');
+      console.error(`📦 [${updateId}] Update error details:`, updateError);
+      
       // Reset buffer on error to prevent stuck state
       try {
+        console.log(`📦 [${updateId}] Resetting buffer due to error...`);
         dataBufferRef.current = '';
-      } catch (resetError) {
-        console.error('Error resetting buffer:', resetError);
+        console.log(`📦 [${updateId}] Buffer reset completed`);
+      } catch (resetError: any) {
+        console.error(`📦 [${updateId}] Error resetting buffer:`, resetError?.message || 'Unknown error');
       }
     }
   };
@@ -471,6 +632,9 @@ export function useBLE(): BLEApi {
         console.log('✅ Started monitoring characteristic successfully');
         console.log('✅ Characteristic monitoring subscription created');
         
+        // Start monitoring for stale data
+        startStaleDataMonitoring();
+        
         // Test if we can read the characteristic once
         try {
           const characteristic = await device.readCharacteristicForService(
@@ -488,6 +652,17 @@ export function useBLE(): BLEApi {
       console.error('❌ Error starting data stream:', streamError);
       console.error('Error details:', streamError?.message || 'Unknown error');
       // Don't throw error, just log it
+    }
+  };
+
+  // Simple reconnect - just try to connect to the last device
+  const reconnectToLastDevice = (): void => {
+    const deviceToReconnect = lastConnectedDeviceRef.current;
+    if (deviceToReconnect) {
+      console.log('🔄 Reconnecting to:', deviceToReconnect.name);
+      connectToDevice(deviceToReconnect).catch(error => {
+        console.log('❌ Reconnect failed:', error);
+      });
     }
   };
 
@@ -520,6 +695,7 @@ export function useBLE(): BLEApi {
 
       if (isMountedRef.current) {
         setConnectedDevice(deviceConnection);
+        lastConnectedDeviceRef.current = deviceConnection; // Store for reconnection
       }
       
       console.log('🔍 Discovering services and characteristics...');
@@ -581,170 +757,319 @@ export function useBLE(): BLEApi {
     }
   };
 
-  // Disconnect from current device with comprehensive null safety
+  // Disconnect from current device with comprehensive null safety and detailed logging
   const disconnectFromDevice = (): void => {
+    const disconnectId = Math.random().toString(36).slice(2, 11);
+    console.log(`🔌 [${disconnectId}] Starting disconnect process...`);
+    console.log(`🔌 [${disconnectId}] Current state - mounted: ${isMountedRef.current}, connectedDevice: ${connectedDevice?.name || 'null'}, subscription: ${!!subscriptionRef.current}`);
+    
     try {
-      console.log('🔌 Starting disconnect process...');
+      // Step 1: Stop stale data monitoring first
+      console.log(`🕐 [${disconnectId}] Step 1: Stopping stale data monitoring...`);
+      try {
+        stopStaleDataMonitoring();
+        console.log(`✅ [${disconnectId}] Stale data monitoring stopped`);
+      } catch (monitorError: any) {
+        console.error(`❌ [${disconnectId}] Error stopping stale data monitoring:`, monitorError?.message || 'Unknown error');
+      }
       
-      // Clean up subscription first with null checks
+      // Step 2: Store current device reference before clearing state
+      const deviceToDisconnect = connectedDevice;
+      console.log(`📱 [${disconnectId}] Step 2: Device to disconnect:`, deviceToDisconnect ? {
+        id: deviceToDisconnect.id,
+        name: deviceToDisconnect.name
+      } : 'null');
+      
+      // Step 3: Clean up subscription first with null checks
+      console.log(`🧹 [${disconnectId}] Step 3: Cleaning up subscription...`);
       if (subscriptionRef.current) {
         try {
-          console.log('🧹 Removing BLE subscription...');
-          if (typeof subscriptionRef.current.remove === 'function') {
+          console.log(`🧹 [${disconnectId}] Subscription exists, removing...`);
+          console.log(`🧹 [${disconnectId}] Subscription type:`, typeof subscriptionRef.current);
+          console.log(`🧹 [${disconnectId}] Subscription has remove method:`, typeof subscriptionRef.current.remove === 'function');
+          
+          if (subscriptionRef.current && typeof subscriptionRef.current.remove === 'function') {
             subscriptionRef.current.remove();
+            console.log(`✅ [${disconnectId}] Subscription.remove() called successfully`);
+          } else {
+            console.warn(`⚠️ [${disconnectId}] Subscription remove method not available`);
           }
+          
           subscriptionRef.current = null;
-          console.log('✅ BLE subscription removed');
+          console.log(`✅ [${disconnectId}] Subscription reference cleared`);
         } catch (subscriptionError: any) {
-          console.warn('⚠️ Error removing subscription:', subscriptionError?.message || 'Unknown error');
+          console.error(`❌ [${disconnectId}] Error removing subscription:`, subscriptionError?.message || 'Unknown error');
+          console.error(`❌ [${disconnectId}] Subscription error stack:`, subscriptionError?.stack || 'No stack');
+          // Force clear subscription reference even if removal failed
+          subscriptionRef.current = null;
+          console.log(`🚨 [${disconnectId}] Force cleared subscription reference`);
         }
       } else {
-        console.log('🔍 No subscription to remove');
+        console.log(`🔍 [${disconnectId}] No subscription to remove`);
       }
 
-      // Clear data buffer safely
+      // Step 4: Clear data buffer safely
+      console.log(`🧹 [${disconnectId}] Step 4: Clearing data buffer...`);
       try {
-        if (dataBufferRef.current !== undefined) {
-          dataBufferRef.current = '';
-          console.log('🧹 Data buffer cleared');
-        }
-      } catch (bufferError) {
-        console.warn('⚠️ Error clearing buffer:', bufferError);
+        const bufferLength = dataBufferRef.current?.length || 0;
+        dataBufferRef.current = '';
+        console.log(`✅ [${disconnectId}] Data buffer cleared (was ${bufferLength} chars)`);
+      } catch (bufferError: any) {
+        console.error(`❌ [${disconnectId}] Error clearing buffer:`, bufferError?.message || 'Unknown error');
+        // Force reset buffer
+        dataBufferRef.current = '';
+        console.log(`🚨 [${disconnectId}] Force cleared data buffer`);
       }
 
-      // Disconnect from device with null checks
-      if (connectedDevice && connectedDevice.id && bleManagerRef.current) {
-        try {
-          logDeviceConnection(connectedDevice, 'disconnected');
-          if (typeof bleManagerRef.current.cancelDeviceConnection === 'function') {
-            bleManagerRef.current.cancelDeviceConnection(connectedDevice.id);
-          }
-          console.log('🔌 Device disconnected');
-        } catch (deviceError: any) {
-          console.warn('⚠️ Error disconnecting device:', deviceError?.message || 'Unknown error');
-        }
-      } else {
-        console.log('🔍 No device to disconnect or BLE manager unavailable');
-      }
-
-      // Reset state only if component is mounted and functions are available
+      // Step 5: Reset state first to prevent UI showing stale connection
+      console.log(`🔄 [${disconnectId}] Step 5: Resetting UI state...`);
+      console.log(`🔄 [${disconnectId}] Component mounted check: ${isMountedRef.current}`);
+      console.log(`🔄 [${disconnectId}] setConnectedDevice type: ${typeof setConnectedDevice}`);
+      console.log(`🔄 [${disconnectId}] setImuData type: ${typeof setImuData}`);
+      
       if (isMountedRef.current) {
         try {
+          console.log(`🔄 [${disconnectId}] Calling setConnectedDevice(null)...`);
           if (typeof setConnectedDevice === 'function') {
             setConnectedDevice(null);
+            console.log(`✅ [${disconnectId}] setConnectedDevice(null) completed`);
+          } else {
+            console.error(`❌ [${disconnectId}] setConnectedDevice is not a function: ${typeof setConnectedDevice}`);
           }
+          
+          console.log(`🔄 [${disconnectId}] Calling setImuData with reset values...`);
+          if (typeof setImuData === 'function') {
+            const resetData = {
+              accelerometer: { x: 0, y: 0, z: 0 },
+              gyroscope: { x: 0, y: 0, z: 0 },
+              raw: { ax: 0, ay: 0, az: 0, gx: 0, gy: 0, gz: 0 },
+              timestamp: '--:--:--',
+              rawData: '0,0,0,0,0,0',
+              isStale: false,
+              lastUpdateTime: Date.now()
+            };
+            console.log(`🔄 [${disconnectId}] Reset data prepared:`, resetData);
+            setImuData(resetData);
+            console.log(`✅ [${disconnectId}] setImuData completed`);
+          } else {
+            console.error(`❌ [${disconnectId}] setImuData is not a function: ${typeof setImuData}`);
+          }
+          
+          console.log(`✅ [${disconnectId}] UI state reset completed`);
+        } catch (stateError: any) {
+          console.error(`❌ [${disconnectId}] Error resetting state:`, stateError?.message || 'Unknown error');
+          console.error(`❌ [${disconnectId}] State error stack:`, stateError?.stack || 'No stack');
+          console.error(`❌ [${disconnectId}] State error details:`, stateError);
+        }
+      } else {
+        console.log(`🔍 [${disconnectId}] Component not mounted, skipping state reset`);
+      }
+
+      // Step 6: Disconnect from device with null checks (do this after state reset)
+      console.log(`🔌 [${disconnectId}] Step 6: Disconnecting from BLE device...`);
+      console.log(`🔌 [${disconnectId}] Device check - deviceToDisconnect: ${!!deviceToDisconnect}, deviceId: ${deviceToDisconnect?.id || 'null'}, bleManager: ${!!bleManagerRef.current}`);
+      
+      if (deviceToDisconnect?.id && bleManagerRef.current) {
+        try {
+          console.log(`🔌 [${disconnectId}] Disconnecting from device:`, deviceToDisconnect.name || deviceToDisconnect.id);
+          console.log(`🔌 [${disconnectId}] BLE Manager type: ${typeof bleManagerRef.current}`);
+          console.log(`🔌 [${disconnectId}] cancelDeviceConnection method: ${typeof bleManagerRef.current.cancelDeviceConnection}`);
+          
+          // Log device connection for tracking
+          try {
+            logDeviceConnection(deviceToDisconnect, 'disconnected');
+            console.log(`✅ [${disconnectId}] Device connection logged`);
+          } catch (logError: any) {
+            console.warn(`⚠️ [${disconnectId}] Error logging device connection:`, logError?.message || 'Unknown error');
+          }
+          
+          if (bleManagerRef.current && typeof bleManagerRef.current.cancelDeviceConnection === 'function') {
+            console.log(`🔌 [${disconnectId}] Calling cancelDeviceConnection...`);
+            
+            try {
+              const disconnectPromise = bleManagerRef.current.cancelDeviceConnection(deviceToDisconnect.id);
+              console.log(`🔌 [${disconnectId}] cancelDeviceConnection called, promise type: ${typeof disconnectPromise}`);
+              
+              // Don't await the promise to prevent blocking, but handle it
+              if (disconnectPromise && typeof disconnectPromise.catch === 'function') {
+                disconnectPromise.catch((error: any) => {
+                  console.warn(`⚠️ [${disconnectId}] Device disconnect promise rejected:`, error?.message || 'Unknown error');
+                  console.warn(`⚠️ [${disconnectId}] Promise rejection stack:`, error?.stack || 'No stack');
+                });
+                console.log(`✅ [${disconnectId}] Promise error handler attached`);
+              } else {
+                console.log(`🔍 [${disconnectId}] No promise returned or no catch method`);
+              }
+            } catch (cancelError: any) {
+              console.error(`❌ [${disconnectId}] Error calling cancelDeviceConnection:`, cancelError?.message || 'Unknown error');
+              console.error(`❌ [${disconnectId}] Cancel error stack:`, cancelError?.stack || 'No stack');
+            }
+          } else {
+            console.error(`❌ [${disconnectId}] cancelDeviceConnection method not available`);
+          }
+          
+          console.log(`✅ [${disconnectId}] Device disconnect process initiated`);
+        } catch (deviceError: any) {
+          console.error(`❌ [${disconnectId}] Error in device disconnect process:`, deviceError?.message || 'Unknown error');
+          console.error(`❌ [${disconnectId}] Device error stack:`, deviceError?.stack || 'No stack');
+        }
+      } else {
+        console.log(`🔍 [${disconnectId}] No device to disconnect or BLE manager unavailable`);
+        console.log(`🔍 [${disconnectId}] - deviceToDisconnect: ${!!deviceToDisconnect}`);
+        console.log(`🔍 [${disconnectId}] - deviceToDisconnect.id: ${deviceToDisconnect?.id || 'null'}`);
+        console.log(`🔍 [${disconnectId}] - bleManagerRef.current: ${!!bleManagerRef.current}`);
+      }
+
+      console.log(`✅ [${disconnectId}] Disconnect process completed successfully`);
+      
+    } catch (disconnectError: any) {
+      console.error(`❌ [${disconnectId}] CRITICAL ERROR during disconnect:`, disconnectError?.message || 'Unknown error');
+      console.error(`❌ [${disconnectId}] Critical error stack:`, disconnectError?.stack || 'No stack');
+      console.error(`❌ [${disconnectId}] Critical error details:`, disconnectError);
+      
+      // Emergency cleanup - force reset everything
+      console.log(`🚨 [${disconnectId}] Starting emergency cleanup...`);
+      try {
+        console.log(`🚨 [${disconnectId}] Emergency: Stopping stale data monitoring...`);
+        stopStaleDataMonitoring();
+        
+        console.log(`🚨 [${disconnectId}] Emergency: Clearing subscription reference...`);
+        subscriptionRef.current = null;
+        
+        console.log(`🚨 [${disconnectId}] Emergency: Clearing data buffer...`);
+        dataBufferRef.current = '';
+        
+        console.log(`🚨 [${disconnectId}] Emergency: Checking if component is mounted...`);
+        if (isMountedRef.current) {
+          console.log(`🚨 [${disconnectId}] Emergency: Resetting state...`);
+          
+          if (typeof setConnectedDevice === 'function') {
+            setConnectedDevice(null);
+            console.log(`🚨 [${disconnectId}] Emergency: setConnectedDevice(null) completed`);
+          }
+          
           if (typeof setImuData === 'function') {
             setImuData({
               accelerometer: { x: 0, y: 0, z: 0 },
               gyroscope: { x: 0, y: 0, z: 0 },
               raw: { ax: 0, ay: 0, az: 0, gx: 0, gy: 0, gz: 0 },
               timestamp: '--:--:--',
-              rawData: '0,0,0,0,0,0'
+              rawData: '0,0,0,0,0,0',
+              isStale: false,
+              lastUpdateTime: Date.now()
             });
+            console.log(`🚨 [${disconnectId}] Emergency: setImuData completed`);
           }
-          console.log('✅ Disconnect completed successfully');
-        } catch (stateError: any) {
-          console.warn('⚠️ Error resetting state:', stateError?.message || 'Unknown error');
         }
-      } else {
-        console.log('🔍 Component unmounted, skipping state reset');
-      }
-    } catch (disconnectError: any) {
-      console.error('❌ Error during disconnect:', disconnectError?.message || 'Unknown error');
-      // Even if there's an error, try to reset the state to prevent stuck connections
-      if (isMountedRef.current) {
-        try {
-          setConnectedDevice(null);
-        } catch (finalError) {
-          console.error('❌ Final error resetting connected device:', finalError);
-        }
+        
+        console.log(`✅ [${disconnectId}] Emergency cleanup completed`);
+      } catch (emergencyError: any) {
+        console.error(`❌ [${disconnectId}] EMERGENCY CLEANUP FAILED:`, emergencyError?.message || 'Unknown error');
+        console.error(`❌ [${disconnectId}] Emergency error stack:`, emergencyError?.stack || 'No stack');
+        console.error(`❌ [${disconnectId}] Emergency error details:`, emergencyError);
       }
     }
+    
+    console.log(`🏁 [${disconnectId}] Disconnect function execution completed`);
   };
 
-  // Cleanup connected device on unmount with comprehensive null safety
+  // Cleanup on unmount - use a single effect without dependencies to avoid race conditions
   useEffect(() => {
+    const cleanupId = Math.random().toString(36).slice(2, 11);
+    console.log(`🏗️ [${cleanupId}] useEffect cleanup handler registered`);
+    
     return () => {
+      console.log(`🧹 [${cleanupId}] Component unmounting, performing cleanup...`);
+      console.log(`🧹 [${cleanupId}] Current state - mounted: ${isMountedRef.current}, subscription: ${!!subscriptionRef.current}, buffer length: ${dataBufferRef.current?.length || 0}`);
+      
       try {
-        // Only cleanup if we have a connected device or are not in connecting state
-        if (connectedDevice || !isConnectingRef.current) {
-          performCleanup();
-        } else {
-          console.log('🔒 Connection in progress, skipping cleanup to maintain connection');
-        }
-      } catch (cleanupError: any) {
-        console.error('❌ Error during component cleanup:', cleanupError?.message || 'Unknown error');
-      }
-    };
-  }, [connectedDevice]);
-
-  // Separate cleanup function
-  const performCleanup = () => {
-    try {
-      console.log('🧹 Performing BLE cleanup...');
-      
-      // Don't cleanup if we have an active connection and are receiving data
-      if (connectedDevice && subscriptionRef.current) {
-        console.log('🔗 Active BLE connection detected, preserving connection');
-        // Only mark as unmounted but don't destroy the connection
+        console.log(`🧹 [${cleanupId}] Step 1: Setting mounted flag to false...`);
         isMountedRef.current = false;
-        return;
-      }
-      
-      console.log('🧹 Component unmounting, cleaning up...');
-      isMountedRef.current = false;
+        console.log(`✅ [${cleanupId}] Mounted flag set to false`);
+        
+        // Stop stale data monitoring immediately
+        console.log(`🧹 [${cleanupId}] Step 2: Stopping stale data monitoring...`);
+        try {
+          stopStaleDataMonitoring();
+          console.log(`✅ [${cleanupId}] Stale data monitoring stopped`);
+        } catch (monitorError: any) {
+          console.error(`❌ [${cleanupId}] Error stopping stale data monitoring:`, monitorError?.message || 'Unknown error');
+        }
         
         // Clean up subscription with null checks
+        console.log(`🧹 [${cleanupId}] Step 3: Cleaning up subscription...`);
         if (subscriptionRef.current) {
           try {
-            if (typeof subscriptionRef.current.remove === 'function') {
+            console.log(`🧹 [${cleanupId}] Subscription exists, type: ${typeof subscriptionRef.current}`);
+            console.log(`🧹 [${cleanupId}] Remove method available: ${typeof subscriptionRef.current.remove === 'function'}`);
+            
+            if (subscriptionRef.current && typeof subscriptionRef.current.remove === 'function') {
               subscriptionRef.current.remove();
+              console.log(`✅ [${cleanupId}] Subscription.remove() called`);
+            } else {
+              console.warn(`⚠️ [${cleanupId}] Subscription remove method not available`);
             }
+            
             subscriptionRef.current = null;
-            console.log('✅ Subscription cleaned up on unmount');
+            console.log(`✅ [${cleanupId}] Subscription reference cleared`);
           } catch (subscriptionError: any) {
-            console.warn('Error removing subscription on unmount:', subscriptionError?.message || 'Unknown error');
+            console.error(`❌ [${cleanupId}] Error removing subscription:`, subscriptionError?.message || 'Unknown error');
+            console.error(`❌ [${cleanupId}] Subscription error stack:`, subscriptionError?.stack || 'No stack');
+            subscriptionRef.current = null; // Force clear
+            console.log(`🚨 [${cleanupId}] Force cleared subscription reference`);
           }
-        }
-
-        // Clean up BLE manager with null checks
-        if (bleManagerRef.current) {
-          try {
-            // Stop scanning if available
-            if (typeof bleManagerRef.current.stopDeviceScan === 'function') {
-              bleManagerRef.current.stopDeviceScan();
-            }
-            
-            // Disconnect device if connected
-            if (connectedDevice && connectedDevice.id && typeof bleManagerRef.current.cancelDeviceConnection === 'function') {
-              bleManagerRef.current.cancelDeviceConnection(connectedDevice.id);
-            }
-            
-            console.log('✅ BLE manager cleaned up on unmount');
-          } catch (bleError: any) {
-            console.warn('Error cleaning up BLE manager on unmount:', bleError?.message || 'Unknown error');
-          }
+        } else {
+          console.log(`🔍 [${cleanupId}] No subscription to clean up`);
         }
 
         // Clear data buffer
+        console.log(`🧹 [${cleanupId}] Step 4: Clearing data buffer...`);
         try {
-          if (dataBufferRef.current !== undefined) {
-            dataBufferRef.current = '';
-          }
-        } catch (bufferError) {
-          console.warn('Error clearing buffer on unmount:', bufferError);
+          const bufferLength = dataBufferRef.current?.length || 0;
+          dataBufferRef.current = '';
+          console.log(`✅ [${cleanupId}] Data buffer cleared (was ${bufferLength} chars)`);
+        } catch (bufferError: any) {
+          console.error(`❌ [${cleanupId}] Error clearing buffer:`, bufferError?.message || 'Unknown error');
+          dataBufferRef.current = ''; // Force clear
+          console.log(`🚨 [${cleanupId}] Force cleared data buffer`);
         }
 
-        console.log('✅ Component cleanup completed');
-    } catch (cleanupError: any) {
-      console.error('❌ Error during component cleanup:', cleanupError?.message || 'Unknown error');
-    }
-  };
+        console.log(`✅ [${cleanupId}] Component cleanup completed successfully`);
+      } catch (cleanupError: any) {
+        console.error(`❌ [${cleanupId}] CRITICAL ERROR during component cleanup:`, cleanupError?.message || 'Unknown error');
+        console.error(`❌ [${cleanupId}] Cleanup error stack:`, cleanupError?.stack || 'No stack');
+        console.error(`❌ [${cleanupId}] Cleanup error details:`, cleanupError);
+        
+        // Force cleanup critical references
+        console.log(`🚨 [${cleanupId}] Starting emergency cleanup...`);
+        try {
+          console.log(`🚨 [${cleanupId}] Emergency: Stopping stale data monitoring...`);
+          stopStaleDataMonitoring();
+          
+          console.log(`🚨 [${cleanupId}] Emergency: Clearing subscription reference...`);
+          subscriptionRef.current = null;
+          
+          console.log(`🚨 [${cleanupId}] Emergency: Clearing data buffer...`);
+          dataBufferRef.current = '';
+          
+          console.log(`✅ [${cleanupId}] Emergency cleanup completed`);
+        } catch (forceError: any) {
+          console.error(`❌ [${cleanupId}] EMERGENCY CLEANUP FAILED:`, forceError?.message || 'Unknown error');
+          console.error(`❌ [${cleanupId}] Emergency error stack:`, forceError?.stack || 'No stack');
+        }
+      }
+      
+      console.log(`🏁 [${cleanupId}] Cleanup function execution completed`);
+    };
+  }, []); // No dependencies to avoid race conditions
+
+
 
   return {
     scanForPeripherals,
     requestPermissions,
     connectToDevice,
+    reconnectToLastDevice,
     allDevices,
     connectedDevice,
     disconnectFromDevice,
