@@ -1,10 +1,13 @@
+// Import polyfills first for React Native compatibility
+import './polyfills';
+
 import React, { useState } from 'react';
-import { Text, View, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { Text, View, TouchableOpacity, StyleSheet, Platform, ScrollView, SafeAreaView } from 'react-native';
 import { Device } from 'react-native-ble-plx';
 import { useBLE } from './hooks/useBLE';
 import { useDataMinting } from './hooks/useDataMinting';
-import { WalletProvider } from './components/AppKitProvider';
-import { useWallet } from './components/AppKitProvider';
+import { ThirdwebProvider } from 'thirdweb/react';
+import { useKineticWallet } from './components/ThirdwebProvider';
 import { 
   validateMintingWorkflow, 
   getWalletStatusMessage, 
@@ -52,17 +55,103 @@ const colors = {
 };
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  scrollContainer: {
+    flexGrow: 1,
+  },
+  container: {
+    backgroundColor: colors.background,
     padding: 20,
-    paddingTop: 60,
+    paddingBottom: 40, // Extra padding at bottom for scroll
   },
   connectedContainer: {
-    flex: 1,
     backgroundColor: colors.background,
     padding: 20,
-    paddingTop: 60,
+    paddingBottom: 40, // Extra padding at bottom for scroll
+  },
+  // Navigation Header Styles
+  navigationHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: colors.card,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: colors.muted,
+    minWidth: 80,
+  },
+  backButtonText: {
+    color: colors.foreground,
+    fontSize: 14,
+    fontWeight: '500',
+    marginLeft: 4,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.foreground,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerButton: {
+    padding: 8,
+    borderRadius: 6,
+    backgroundColor: colors.muted,
+  },
+  headerButtonText: {
+    color: colors.foreground,
+    fontSize: 12,
+  },
+  // Device Status Section
+  deviceStatusSection: {
+    alignItems: 'center',
+    marginBottom: 24,
+    paddingTop: 20,
+  },
+  // Section Headers
+  sectionHeader: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: colors.foreground,
+    marginBottom: 16,
+    marginTop: 24,
+    textAlign: 'center',
+  },
+  // Improved spacing for sections
+  sensorDataSection: {
+    marginBottom: 24,
+  },
+  walletSection: {
+    marginBottom: 16,
+  },
+  dataCollectionSection: {
+    marginBottom: 24,
+  },
+  // Scroll indicator styles
+  scrollIndicator: {
+    position: 'absolute',
+    right: 4,
+    top: '50%',
+    width: 3,
+    height: 40,
+    backgroundColor: colors.accent,
+    borderRadius: 2,
+    opacity: 0.6,
   },
   title: {
     fontSize: 28,
@@ -218,10 +307,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textAlign: 'center',
   },
-  // Wallet connection styles (for AppKit integration)
-  walletSection: {
-    marginBottom: 24,
-  },
+
   // Data Minting Styles
   mintingSection: {
     marginBottom: 24,
@@ -343,8 +429,8 @@ function AppContent() {
     hasError,
   } = useBLE();
 
-  // Custom wallet hooks
-  const { address, isConnected, isConnecting, connect, disconnect } = useWallet();
+  // Thirdweb wallet hooks (now the main wallet)
+  const { address, isConnected, isConnecting, connect, disconnect } = useKineticWallet();
 
   // Wallet state derived from custom wallet context
   const isWalletConnected = isConnected;
@@ -371,12 +457,32 @@ function AppContent() {
     }
   };
 
+  // Helper function to handle session recovery
+  const handleSessionRecovery = async () => {
+    console.log('🔄 Attempting session recovery...');
+    try {
+      // First disconnect
+      await disconnectWallet();
+      
+      // Wait a moment
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Then reconnect
+      await connectWallet();
+      
+      console.log('✅ Session recovery completed');
+    } catch (error: any) {
+      console.error('❌ Session recovery failed:', error);
+    }
+  };
+
   // Note: Transaction signing is now handled internally by the useDataMinting hook
 
   const {
     startCollection,
     stopCollection,
     mintCollectedData,
+    mintToBlockchain,
     addDataPoint,
     clearData,
     isCollecting,
@@ -439,9 +545,41 @@ function AppContent() {
 
   // Collect IMU data when collection is active
   React.useEffect(() => {
+    // const effectId = Math.random().toString(36).slice(2, 8);
+    // console.log(`📊 [${effectId}] Data collection useEffect triggered:`, {
+    //   isCollecting,
+    //   isStale: imuData.isStale,
+    //   hasDevice: !!connectedDevice,
+    //   deviceName: connectedDevice?.name,
+    //   accelerometer: imuData.accelerometer,
+    //   gyroscope: imuData.gyroscope,
+    //   timestamp: imuData.timestamp,
+    //   collectedDataLength: collectedData.length
+    // });
+    
     if (isCollecting && !imuData.isStale && connectedDevice) {
+      // console.log(`📊 [${effectId}] ✅ All conditions met, adding data point to collection`);
+      // console.log(`📊 [${effectId}] Current IMU data structure:`, {
+      //   accelerometer: imuData.accelerometer,
+      //   gyroscope: imuData.gyroscope,
+      //   raw: imuData.raw,
+      //   timestamp: imuData.timestamp,
+      //   isStale: imuData.isStale
+      // });
+      
       // Add current data point to collection
       addDataPoint(imuData);
+      
+      // console.log(`📊 [${effectId}] Data point sent to addDataPoint function`);
+    } else {
+      // console.log(`📊 [${effectId}] ❌ Conditions not met for data collection:`, {
+      //   isCollecting: isCollecting ? '✅ Collecting' : '❌ Not collecting',
+      //   dataFresh: !imuData.isStale ? '✅ Fresh data' : '❌ Stale data',
+      //   deviceConnected: connectedDevice ? '✅ Device connected' : '❌ No device',
+      //   reason: !isCollecting ? 'Collection not started' : 
+      //           imuData.isStale ? 'Data is stale' : 
+      //           !connectedDevice ? 'No device connected' : 'Unknown'
+      // });
     }
   }, [imuData, isCollecting, connectedDevice, addDataPoint]);
 
@@ -545,52 +683,101 @@ function AppContent() {
 
   if (connectedDevice) {
     return (
-      <View style={styles.connectedContainer}>
-        <Text style={styles.title}>
-          Kinetic IMU Dashboard
-        </Text>
-        <Text style={styles.subtitle}>
-          Connected: {connectedDevice.name || 'Kinetic Device'}
-          {imuData.isStale && ' ⚠️ DATA STALE'}
-        </Text>
+      <SafeAreaView style={styles.safeArea}>
+        {/* Navigation Header */}
+        <View style={styles.navigationHeader}>
+          <TouchableOpacity 
+            style={styles.backButton}
+            onPress={handleDisconnect}
+          >
+            <Text style={styles.backButtonText}>← Back</Text>
+          </TouchableOpacity>
+          
+          <Text style={styles.headerTitle}>IMU Dashboard</Text>
+          
+          <View style={styles.headerActions}>
+            {imuData.isStale && (
+              <TouchableOpacity
+                style={styles.headerButton}
+                onPress={reconnectToLastDevice}
+              >
+                <Text style={styles.headerButtonText}>🔄</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={styles.headerButton}
+              onPress={() => {
+                // Add settings/info action here if needed
+                console.log('Header info button pressed');
+              }}
+            >
+              <Text style={styles.headerButtonText}>ℹ️</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <ScrollView 
+          style={{ flex: 1 }}
+          contentContainerStyle={styles.scrollContainer}
+          showsVerticalScrollIndicator={true}
+          bounces={true}
+          keyboardShouldPersistTaps="handled"
+          scrollEventThrottle={16}
+        >
+          <View style={styles.connectedContainer}>
+        {/* Device Status Section */}
+        <View style={styles.deviceStatusSection}>
+          <Text style={styles.title}>
+            Kinetic IMU Dashboard
+          </Text>
+          <Text style={styles.subtitle}>
+            Connected: {connectedDevice.name || 'Kinetic Device'}
+            {imuData.isStale && ' ⚠️ DATA STALE'}
+          </Text>
+        </View>
         
-        {/* IMU Data - Kinetic Branded */}
-        <View style={[styles.dataCard, imuData.isStale && { borderColor: colors.destructive, borderWidth: 2 }]}>
-          <Text style={[styles.dataCardTitle, { color: imuData.isStale ? colors.destructive : colors.accent }]}>
-            Accelerometer (g) {imuData.isStale && '⚠️'}
-          </Text>
-          <View style={styles.dataRow}>
-            <Text style={[styles.dataValue, imuData.isStale && { color: colors.destructive }]}>
-              X: {formatValue(imuData.accelerometer.x)}
+        {/* Sensor Data Section */}
+        <View style={styles.sensorDataSection}>
+          <Text style={styles.sectionHeader}>📊 Sensor Data</Text>
+          
+          <View style={[styles.dataCard, imuData.isStale && { borderColor: colors.destructive, borderWidth: 2 }]}>
+            <Text style={[styles.dataCardTitle, { color: imuData.isStale ? colors.destructive : colors.accent }]}>
+              Accelerometer (g) {imuData.isStale && '⚠️'}
             </Text>
-            <Text style={[styles.dataValue, imuData.isStale && { color: colors.destructive }]}>
-              Y: {formatValue(imuData.accelerometer.y)}
+            <View style={styles.dataRow}>
+              <Text style={[styles.dataValue, imuData.isStale && { color: colors.destructive }]}>
+                X: {formatValue(imuData.accelerometer.x)}
+              </Text>
+              <Text style={[styles.dataValue, imuData.isStale && { color: colors.destructive }]}>
+                Y: {formatValue(imuData.accelerometer.y)}
+              </Text>
+              <Text style={[styles.dataValue, imuData.isStale && { color: colors.destructive }]}>
+                Z: {formatValue(imuData.accelerometer.z)}
+              </Text>
+            </View>
+          </View>
+
+          <View style={[styles.dataCard, imuData.isStale && { borderColor: colors.destructive, borderWidth: 2 }]}>
+            <Text style={[styles.dataCardTitle, { color: imuData.isStale ? colors.destructive : colors.purple[500] }]}>
+              Gyroscope (°/s) {imuData.isStale && '⚠️'}
             </Text>
-            <Text style={[styles.dataValue, imuData.isStale && { color: colors.destructive }]}>
-              Z: {formatValue(imuData.accelerometer.z)}
-            </Text>
+            <View style={styles.dataRow}>
+              <Text style={[styles.dataValue, imuData.isStale && { color: colors.destructive }]}>
+                X: {formatValue(imuData.gyroscope.x)}
+              </Text>
+              <Text style={[styles.dataValue, imuData.isStale && { color: colors.destructive }]}>
+                Y: {formatValue(imuData.gyroscope.y)}
+              </Text>
+              <Text style={[styles.dataValue, imuData.isStale && { color: colors.destructive }]}>
+                Z: {formatValue(imuData.gyroscope.z)}
+              </Text>
+            </View>
           </View>
         </View>
 
-        <View style={[styles.dataCard, imuData.isStale && { borderColor: colors.destructive, borderWidth: 2 }]}>
-          <Text style={[styles.dataCardTitle, { color: imuData.isStale ? colors.destructive : colors.purple[500] }]}>
-            Gyroscope (°/s) {imuData.isStale && '⚠️'}
-          </Text>
-          <View style={styles.dataRow}>
-            <Text style={[styles.dataValue, imuData.isStale && { color: colors.destructive }]}>
-              X: {formatValue(imuData.gyroscope.x)}
-            </Text>
-            <Text style={[styles.dataValue, imuData.isStale && { color: colors.destructive }]}>
-              Y: {formatValue(imuData.gyroscope.y)}
-            </Text>
-            <Text style={[styles.dataValue, imuData.isStale && { color: colors.destructive }]}>
-              Z: {formatValue(imuData.gyroscope.z)}
-            </Text>
-          </View>
-        </View>
-
-        {/* Wallet Status Section - AppKit Integration */}
+        {/* Wallet Section */}
         <View style={styles.walletSection}>
+          <Text style={styles.sectionHeader}>🔗 Wallet Connection</Text>
           {isWalletConnected ? (
             <View style={styles.dataCard}>
               <Text style={styles.dataCardTitle}>🔗 Wallet Connected</Text>
@@ -628,8 +815,9 @@ function AppContent() {
           )}
         </View>
 
-        {/* Data Collection & Minting Section */}
-        <View style={styles.mintingSection}>
+        {/* Data Collection Section */}
+        <View style={styles.dataCollectionSection}>
+          <Text style={styles.sectionHeader}>📊 Data Collection & Export</Text>
           <View style={styles.collectionStatus}>
             <Text style={styles.collectionTitle}>Data Collection</Text>
             <Text style={[styles.collectionTimer, { 
@@ -650,18 +838,35 @@ function AppContent() {
                   }
                 ]}
                 onPress={() => {
+                  const collectionId = Math.random().toString(36).slice(2, 8);
+                  console.log(`🎯 [${collectionId}] Start Collection button pressed`);
+                  console.log(`🎯 [${collectionId}] Pre-collection state:`, {
+                    connectedDevice: !!connectedDevice,
+                    deviceName: connectedDevice?.name,
+                    dataStale: imuData.isStale,
+                    currentDataLength: collectedData.length,
+                    isCurrentlyCollecting: isCollecting,
+                    currentIMUData: {
+                      accelerometer: imuData.accelerometer,
+                      gyroscope: imuData.gyroscope,
+                      timestamp: imuData.timestamp
+                    }
+                  });
+                  
                   // Guard against starting collection without proper device connection
                   if (!connectedDevice) {
-                    console.log('❌ Collection blocked: No device connected');
+                    console.log(`❌ [${collectionId}] Collection blocked: No device connected`);
                     return;
                   }
                   
                   if (imuData.isStale) {
-                    console.log('❌ Collection blocked: Device data is stale');
+                    console.log(`❌ [${collectionId}] Collection blocked: Device data is stale`);
                     return;
                   }
                   
+                  console.log(`✅ [${collectionId}] All checks passed, starting collection...`);
                   startCollection();
+                  console.log(`🎯 [${collectionId}] startCollection() called`);
                 }}
                 disabled={!connectedDevice || imuData.isStale}
               >
@@ -696,21 +901,33 @@ function AppContent() {
                     }
                   ]}
                   onPress={() => {
-                    console.log('🚀 Mint button pressed');
-                    console.log('Minting validation:', mintingValidation);
+                    const mintId = Math.random().toString(36).slice(2, 8);
+                    console.log(`🚀 [${mintId}] Mint button pressed`);
+                    console.log(`🚀 [${mintId}] Current state:`, {
+                      collectedDataLength: collectedData.length,
+                      isCollecting,
+                      isMinting,
+                      isWalletConnected,
+                      walletAddress: walletAccount,
+                      deviceConnected: !!connectedDevice,
+                      dataStale: imuData.isStale
+                    });
+                    console.log(`🚀 [${mintId}] Minting validation:`, mintingValidation);
                     
                     // Use wallet guards to validate requirements
                     if (!mintingValidation.canProceed) {
-                      console.log('❌ Minting blocked by validation:', mintingValidation.errorMessage);
+                      console.log(`❌ [${mintId}] Minting blocked by validation:`, mintingValidation.errorMessage);
                       
                       // If wallet connection is the issue, open AppKit modal
                       if (mintingValidation.errorMessage?.includes('Wallet') || 
                           mintingValidation.errorMessage?.includes('wallet')) {
+                        console.log(`🔗 [${mintId}] Opening wallet connection...`);
                         connectWallet();
                       }
                       return;
                     }
                     
+                    console.log(`✅ [${mintId}] All validations passed, proceeding with minting...`);
                     // All validations passed, proceed with minting
                     mintCollectedData();
                   }}
@@ -720,11 +937,44 @@ function AppContent() {
                     styles.primaryButtonText,
                     (isMinting || !mintingValidation.canProceed) && { color: colors.mutedForeground }
                   ]}>
-                    {isMinting ? '⏳ Minting via Wallet...' : 
+                    {isMinting ? '⏳ Exporting Data...' : 
                      !mintingValidation.canProceed ? '🚫 Requirements Not Met' : 
-                     '🚀 Mint IMU Data NFT'}
+                     '📊 Export IMU Data JSON'}
                   </Text>
                 </TouchableOpacity>
+
+                {/* Blockchain Minting Button - Show only after successful JSON export */}
+                {mintResult && mintResult.status === 'exported' && isWalletConnected && (
+                  <TouchableOpacity
+                    style={[
+                      styles.primaryButton, 
+                      { 
+                        backgroundColor: isMinting ? colors.muted : colors.purple[600],
+                        shadowColor: isMinting ? 'transparent' : colors.purple[600],
+                        marginTop: 8
+                      }
+                    ]}
+                    onPress={() => {
+                      const blockchainMintId = Math.random().toString(36).slice(2, 8);
+                      console.log(`⛓️ [${blockchainMintId}] Blockchain mint button pressed`);
+                      console.log(`⛓️ [${blockchainMintId}] Wallet state:`, {
+                        isConnected: isWalletConnected,
+                        address: walletAccount,
+                        hasExportedData: !!mintResult?.exportedData
+                      });
+                      
+                      mintToBlockchain();
+                    }}
+                    disabled={isMinting}
+                  >
+                    <Text style={[
+                      styles.primaryButtonText,
+                      isMinting && { color: colors.mutedForeground }
+                    ]}>
+                      {isMinting ? '⏳ Minting to Blockchain...' : '⛓️ Mint to Blockchain'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
 
                 <TouchableOpacity
                   style={[styles.destructiveButton, { marginTop: 8 }]}
@@ -747,25 +997,69 @@ function AppContent() {
             )}
 
             {/* Show helpful status messages */}
-            {mintingValidation.canProceed && collectedData.length > 0 && !isCollecting && (
+            {mintingValidation.canProceed && collectedData.length > 0 && !isCollecting && !mintResult && (
               <View style={[styles.requirementCard, { borderColor: colors.accent }]}>
                 <Text style={[styles.requirementText, { color: colors.accent }]}>
-                  ✅ Ready to mint {collectedData.length} IMU data points as NFT
+                  ✅ Ready to export {collectedData.length} IMU data points as JSON
+                </Text>
+              </View>
+            )}
+
+            {/* Show blockchain minting option after export */}
+            {mintResult && mintResult.status === 'exported' && isWalletConnected && !mintResult.blockchainMint && (
+              <View style={[styles.requirementCard, { borderColor: colors.purple[500] }]}>
+                <Text style={[styles.requirementText, { color: colors.purple[500] }]}>
+                  ⛓️ Data exported! Now you can mint it to the blockchain as an NFT
+                </Text>
+              </View>
+            )}
+
+            {/* Show blockchain minting success */}
+            {mintResult && mintResult.blockchainMint && (
+              <View style={[styles.requirementCard, { borderColor: colors.accent }]}>
+                <Text style={[styles.requirementText, { color: colors.accent }]}>
+                  🎉 Successfully minted to blockchain! Your IMU data is now an NFT
                 </Text>
               </View>
             )}
           </View>
 
           {mintingError && (
-            <Text style={styles.errorText}>{mintingError}</Text>
+            <View>
+              <Text style={styles.errorText}>{mintingError}</Text>
+              {/* Show session recovery button for session-related errors */}
+              {(mintingError.includes('session') || mintingError.includes('reconnect')) && (
+                <TouchableOpacity
+                  style={[styles.primaryButton, { 
+                    backgroundColor: colors.accent,
+                    marginTop: 8
+                  }]}
+                  onPress={handleSessionRecovery}
+                >
+                  <Text style={styles.primaryButtonText}>
+                    🔄 Reconnect Wallet
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
           )}
 
           {mintResult && (
             <View style={styles.mintResult}>
-              <Text style={styles.mintResultTitle}>✅ IMU Data NFT Signed!</Text>
-              <Text style={styles.mintResultText}>
-                {mintResult.message || `Transaction prepared for ${collectedData.length} IMU data points`}
+              <Text style={styles.mintResultTitle}>
+                {mintResult.blockchainMint ? '⛓️ Blockchain Minted!' : '✅ IMU Data Exported!'}
               </Text>
+              <Text style={styles.mintResultText}>
+                {mintResult.blockchainMint 
+                  ? mintResult.blockchainMint.message 
+                  : (mintResult.message || `Transaction prepared for ${collectedData.length} IMU data points`)
+                }
+              </Text>
+              {mintResult.blockchainMint && (
+                <Text style={[styles.mintResultText, { fontSize: 10, marginTop: 4, color: colors.accent }]}>
+                  TX: {mintResult.blockchainMint.transactionHash?.slice(0, 20)}...
+                </Text>
+              )}
               {mintResult.dataIntegrity && (
                 <Text style={[styles.mintResultText, { fontSize: 10, marginTop: 4 }]}>
                   Signed: {mintResult.dataIntegrity.pointsCollected} points • {Math.round(mintResult.dataIntegrity.collectionDuration / 1000)}s
@@ -774,9 +1068,9 @@ function AppContent() {
             </View>
           )}
 
-          {/* Status Overview */}
+          {/* System Status Overview */}
           <View style={styles.statusOverview}>
-            <Text style={styles.statusTitle}>System Status</Text>
+            <Text style={styles.sectionHeader}>⚡ System Status</Text>
             <View style={styles.statusGrid}>
               <View style={styles.statusItem}>
                 <Text style={[styles.statusGridLabel, { color: connectedDevice ? colors.accent : colors.destructive }]}>
@@ -802,47 +1096,58 @@ function AppContent() {
           </View>
         </View>
 
-        {/* Kinetic Branded Reconnect Button */}
-        {imuData.isStale && (
-          <TouchableOpacity
-            style={[styles.primaryButton, { 
-              backgroundColor: colors.primary,
-              shadowColor: colors.primary,
-            }]}
-            onPress={() => {
-              reconnectToLastDevice();
-            }}
-          >
-            <Text style={styles.primaryButtonText}>
-              🔄 Reconnect Device
-            </Text>
-          </TouchableOpacity>
-        )}
 
-        <TouchableOpacity
-          style={[
-            styles.destructiveButton,
-            isDisconnecting && styles.destructiveButtonDisabled
-          ]}
-          onPress={handleDisconnect}
-          disabled={isDisconnecting}
-        >
-          <Text style={styles.destructiveButtonText}>
-            {isDisconnecting ? 'Disconnecting...' : 'Disconnect'}
-          </Text>
-        </TouchableOpacity>
-      </View>
+
+          </View>
+        </ScrollView>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-      <Text style={styles.title}>
-        Kinetic Device Scanner
-      </Text>
-      
-      {/* Wallet Connection Section - AppKit Integration */}
-      <View style={styles.walletSection}>
+    <SafeAreaView style={styles.safeArea}>
+      {/* Navigation Header for Scanner */}
+      <View style={styles.navigationHeader}>
+        <View style={styles.backButton}>
+          <Text style={styles.backButtonText}>🔍 Scanner</Text>
+        </View>
+        
+        <Text style={styles.headerTitle}>Kinetic Devices</Text>
+        
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            style={styles.headerButton}
+            onPress={() => {
+              console.log('Refresh devices');
+              if (isReady && !isScanning) {
+                scanForDevices();
+              }
+            }}
+          >
+            <Text style={styles.headerButtonText}>🔄</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <ScrollView 
+        style={{ flex: 1 }}
+        contentContainerStyle={[styles.scrollContainer, { justifyContent: 'flex-start', alignItems: 'center', minHeight: '100%' }]}
+        showsVerticalScrollIndicator={true}
+        bounces={true}
+        keyboardShouldPersistTaps="handled"
+        scrollEventThrottle={16}
+      >
+        <View style={styles.container}>
+          {/* Scanner Title Section */}
+          <View style={styles.deviceStatusSection}>
+            <Text style={styles.title}>
+              Kinetic Device Scanner
+            </Text>
+          </View>
+          
+          {/* Wallet Connection Section */}
+          <View style={styles.walletSection}>
+            <Text style={styles.sectionHeader}>🔗 Wallet Setup</Text>
         {!isWalletConnected ? (
           <>
             <TouchableOpacity
@@ -860,35 +1165,66 @@ function AppContent() {
                 {isWalletConnecting ? '🔄 Connecting...' : '🔗 Connect Wallet'}
               </Text>
             </TouchableOpacity>
-            <View style={styles.requirementCard}>
-              <Text style={styles.requirementText}>
-                💡 Connect your wallet now to streamline the minting process after data collection
+            <View style={[styles.requirementCard, { padding: 8, marginTop: 8 }]}>
+              <Text style={[styles.requirementText, { fontSize: 11 }]}>
+                💡 Connect wallet for minting
               </Text>
             </View>
           </>
         ) : (
-          <View style={styles.dataCard}>
-            <Text style={styles.dataCardTitle}>🔗 Wallet Connected</Text>
-            <Text style={[styles.dataValue, { fontSize: 12, fontFamily: 'monospace' }]}>
-              {walletAccount}
-            </Text>
-            <Text style={[styles.requirementText, { marginTop: 8, marginBottom: 8, color: colors.accent }]}>
-              {getWalletStatusMessage(walletState)}
-            </Text>
-            <TouchableOpacity
-              style={[styles.destructiveButton, { marginTop: 12 }]}
-              onPress={disconnectWallet}
-            >
-              <Text style={styles.destructiveButtonText}>
-                ⚙️ Manage Wallet
-              </Text>
-            </TouchableOpacity>
+          <View style={[styles.dataCard, { 
+            padding: 8, 
+            marginBottom: 8,
+            minHeight: 'auto'
+          }]}>
+            <View style={{ 
+              flexDirection: 'row', 
+              alignItems: 'center', 
+              justifyContent: 'space-between',
+              minHeight: 'auto'
+            }}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.dataCardTitle, { 
+                  fontSize: 12, 
+                  marginBottom: 2,
+                  lineHeight: 14
+                }]}>🔗 Connected</Text>
+                <Text style={[styles.dataValue, { 
+                  fontSize: 9, 
+                  fontFamily: 'monospace',
+                  lineHeight: 12
+                }]}>
+                  {walletAccount?.slice(0, 6)}...{walletAccount?.slice(-4)}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.destructiveButton, { 
+                  marginTop: 0, 
+                  paddingVertical: 6, 
+                  paddingHorizontal: 8,
+                  minHeight: 'auto',
+                  borderWidth: 1
+                }]}
+                onPress={disconnectWallet}
+              >
+                <Text style={[styles.destructiveButtonText, { 
+                  fontSize: 10,
+                  lineHeight: 12
+                }]}>
+                  ⚙️
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
       </View>
       
-      {/* BLE Status Indicator */}
-      <View style={styles.statusIndicator}>
+          {/* Device Scanner Section */}
+          <View style={styles.sensorDataSection}>
+            <Text style={styles.sectionHeader}>📡 Device Scanner</Text>
+            
+            {/* BLE Status Indicator */}
+            <View style={styles.statusIndicator}>
         <View style={[styles.statusDot, { 
           backgroundColor: hasError ? colors.destructive : isReady ? colors.accent : colors.gray[500] 
         }]} />
@@ -897,69 +1233,81 @@ function AppContent() {
         </Text>
       </View>
 
-      <TouchableOpacity
-        style={[
-          styles.primaryButton,
-          !isReady && styles.primaryButtonDisabled
-        ]}
-        onPress={scanForDevices}
-        disabled={!isReady}
-      >
-        <Text style={[
-          styles.primaryButtonText,
-          !isReady && styles.primaryButtonTextDisabled
-        ]}>
-          {isScanning ? 'Scanning...' : 'Scan for Kinetic Devices'}
-        </Text>
-      </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.primaryButton,
+                !isReady && styles.primaryButtonDisabled
+              ]}
+              onPress={scanForDevices}
+              disabled={!isReady}
+            >
+              <Text style={[
+                styles.primaryButtonText,
+                !isReady && styles.primaryButtonTextDisabled
+              ]}>
+                {isScanning ? 'Scanning...' : 'Scan for Kinetic Devices'}
+              </Text>
+            </TouchableOpacity>
 
-      {allDevices.map((device, index) => (
-        <TouchableOpacity
-          key={device.id}
-          style={[
-            styles.deviceCard,
-            isLoading && { opacity: 0.6 }
-          ]}
-          onPress={() => handleConnect(device)}
-          disabled={isLoading}
-          activeOpacity={0.7}
-        >
-          <View style={styles.deviceHeader}>
-            <Text style={styles.deviceName}>
-              {device.name || device.localName || `Kinetic Device ${index + 1}`}
-            </Text>
-            <View style={[styles.statusDot, { 
-              backgroundColor: colors.accent,
-              width: 6,
-              height: 6,
-            }]} />
+            {/* Available Devices */}
+            {allDevices.length > 0 && (
+              <Text style={[styles.sectionHeader, { fontSize: 16, marginTop: 16, marginBottom: 8 }]}>
+                📱 Available Devices ({allDevices.length})
+              </Text>
+            )}
+
+            {allDevices.map((device, index) => (
+              <TouchableOpacity
+                key={device.id}
+                style={[
+                  styles.deviceCard,
+                  isLoading && { opacity: 0.6 }
+                ]}
+                onPress={() => handleConnect(device)}
+                disabled={isLoading}
+                activeOpacity={0.7}
+              >
+                <View style={styles.deviceHeader}>
+                  <Text style={styles.deviceName}>
+                    {device.name || device.localName || `Kinetic Device ${index + 1}`}
+                  </Text>
+                  <View style={[styles.statusDot, { 
+                    backgroundColor: colors.accent,
+                    width: 6,
+                    height: 6,
+                  }]} />
+                </View>
+                <Text style={styles.deviceId}>
+                  {device.id}
+                </Text>
+                {isLoading && (
+                  <Text style={styles.connectingText}>
+                    Connecting...
+                  </Text>
+                )}
+              </TouchableOpacity>
+            ))}
+
+            {allDevices.length === 0 && !isScanning && isReady && (
+              <Text style={styles.emptyState}>
+                No Kinetic devices found.{'\n'}Make sure your device is powered on and advertising.
+              </Text>
+            )}
           </View>
-          <Text style={styles.deviceId}>
-            {device.id}
-          </Text>
-          {isLoading && (
-            <Text style={styles.connectingText}>
-              Connecting...
-            </Text>
-          )}
-        </TouchableOpacity>
-      ))}
-
-
-      
-      {allDevices.length === 0 && !isScanning && isReady && (
-        <Text style={styles.emptyState}>
-          No Kinetic devices found.{'\n'}Make sure your device is powered on and advertising.
-        </Text>
-      )}
-    </View>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
+// AppContent is already defined above with all the UI logic
+
 export default function App() {
+  console.log('🚀 App component rendering with Thirdweb v5 as main wallet...');
+  
   return (
-    <WalletProvider>
+    <ThirdwebProvider>
       <AppContent />
-    </WalletProvider>
+    </ThirdwebProvider>
   );
 }

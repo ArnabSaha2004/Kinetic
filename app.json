@@ -12,6 +12,21 @@
     "assetBundlePatterns": [
       "**/*"
     ],
+    "scheme": "kinetic",
+    "intentFilters": [
+      {
+        "action": "VIEW",
+        "autoVerify": true,
+        "data": [
+          {
+            "scheme": "kinetic"
+          },
+          {
+            "scheme": "wc"
+          }
+        ]
+      }
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.kinetic.imu.dashboard",
@@ -35,7 +50,31 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0a0a0f"
-      }
+      },
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "kinetic"
+            },
+            {
+              "scheme": "wc"
+            },
+            {
+              "scheme": "metamask"
+            },
+            {
+              "scheme": "trust"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ]
     },
     "plugins": [
       [
@@ -49,7 +88,25 @@
           "bluetoothAlwaysPermission": "Allow $(PRODUCT_NAME) to connect to bluetooth devices"
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 26
+          },
+          "ios": {
+            "extraPods": [
+              {
+                "name": "OpenSSL-Universal",
+                "configurations": ["Release", "Debug"],
+                "modular_headers": true,
+                "version": "3.3.2000"
+              }
+            ]
+          }
+        }
+      ]
     ],
     "extra": {
       "eas": {

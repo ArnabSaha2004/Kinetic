@@ -20,7 +20,7 @@ A secure, scalable API system that prepares blockchain transactions for IP asset
 curl -X POST http://localhost:3000/api/license-remixer \
   -H "Content-Type: application/json" \
   -d '{
-    "creatorAddress": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
+    "creatorAddress": "0x1234567890123456789012345678901234567890",
     "commercialUse": true,
     "derivativesAllowed": true,
     "revenueSharePercentage": 10,
@@ -34,11 +34,11 @@ curl -X POST http://localhost:3000/api/license-remixer \
 curl -X POST http://localhost:3000/api/prepare-mint \
   -H "Content-Type: application/json" \
   -d '{
-    "userAddress": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
+    "userAddress": "0x1234567890123456789012345678901234567890",
     "ipMetadata": {
       "title": "My IP Asset",
       "description": "Description of my intellectual property",
-      "creators": [{"name": "Creator", "address": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6", "contributionPercent": 100}]
+      "creators": [{"name": "Creator", "address": "0x1234567890123456789012345678901234567890", "contributionPercent": 100}]
     },
     "nftMetadata": {
       "name": "My NFT",
