@@ -19,15 +19,12 @@ const STORAGE_KEYS = {
   WALLET_CONNECTED: '@kinetic_wallet_connected',
 } as const;
 
-// Wallet configurations matching the Thirdweb starter
+// Wallet configurations - simplified for reliable builds
 export const wallets = [
   inAppWallet({
     auth: {
       options: [
         "google",
-        "facebook",
-        "discord",
-        "telegram",
         "email",
         "phone",
         "passkey",
@@ -40,20 +37,6 @@ export const wallets = [
     },
   }),
   createWallet("io.metamask"),
-  createWallet("com.coinbase.wallet", {
-    appMetadata: {
-      name: "Kinetic IMU App",
-    },
-    mobileConfig: {
-      callbackURL: "com.kinetic.app://",
-    },
-    walletConfig: {
-      options: "smartWalletOnly",
-    },
-  }),
-  createWallet("me.rainbow"),
-  createWallet("com.trustwallet.app"),
-  createWallet("io.zerion.wallet"),
 ];
 
 // Custom hook for wallet functionality with session persistence
