@@ -10,10 +10,7 @@ if (typeof global.process === 'undefined') {
   global.process = require('process');
 }
 
-// Import Thirdweb React Native adapter for non-web platforms
-if (Platform.OS !== "web") {
-  import("@thirdweb-dev/react-native-adapter");
-}
+// Thirdweb v5 doesn't need the React Native adapter
 
 // Import the main Expo entry point
 import "expo/AppEntry";

@@ -8,6 +8,7 @@ import { useBLE } from './hooks/useBLE';
 import { useDataMinting } from './hooks/useDataMinting';
 import { ThirdwebProvider } from 'thirdweb/react';
 import { useKineticWallet } from './components/ThirdwebProvider';
+import { client } from './constants/thirdweb';
 import { 
   validateMintingWorkflow, 
   getWalletStatusMessage, 
@@ -1306,7 +1307,7 @@ export default function App() {
   console.log('🚀 App component rendering with Thirdweb v5 as main wallet...');
   
   return (
-    <ThirdwebProvider>
+    <ThirdwebProvider client={client}>
       <AppContent />
     </ThirdwebProvider>
   );
