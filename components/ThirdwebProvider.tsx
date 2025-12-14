@@ -7,7 +7,8 @@ import {
   useDisconnect,
   useSendAndConfirmTransaction 
 } from 'thirdweb/react';
-import { createWallet, inAppWallet } from 'thirdweb/wallets';
+// Import only MetaMask and In-App wallet to avoid Coinbase SDK dependency
+import { inAppWallet } from 'thirdweb/wallets/in-app';
 import { client, chain } from '../constants/thirdweb';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -19,7 +20,7 @@ const STORAGE_KEYS = {
   WALLET_CONNECTED: '@kinetic_wallet_connected',
 } as const;
 
-// Wallet configurations - simplified for reliable builds
+// Wallet configurations - only in-app wallet to avoid external SDK dependencies
 export const wallets = [
   inAppWallet({
     auth: {
@@ -36,7 +37,6 @@ export const wallets = [
       sponsorGas: true,
     },
   }),
-  createWallet("io.metamask"),
 ];
 
 // Custom hook for wallet functionality with session persistence
@@ -86,45 +86,29 @@ export function useKineticWallet() {
     }
   };
 
-  // Connect to MetaMask
-  const connectMetaMask = async () => {
+  // Connect with Email (In-App Wallet)
+  const connectWithEmail = async () => {
     try {
-      console.log('🦊 Connecting to MetaMask...');
+      console.log('📧 Connecting with Email...');
       
       await connect(async () => {
-        const metamaskWallet = createWallet("io.metamask");
-        await metamaskWallet.connect({
-          client,
-          chain,
+        const w = inAppWallet({
+          smartAccount: {
+            chain,
+            sponsorGas: true,
+          },
         });
-        return metamaskWallet;
+        await w.connect({
+          client,
+          strategy: "email",
+        });
+        return w;
       });
       
-      console.log('✅ MetaMask connected successfully');
+      console.log('✅ Email connection successful');
     } catch (error: any) {
-      console.error('❌ MetaMask connection failed:', error);
-      
-      if (error.message?.includes('User rejected') || error.code === 4001) {
-        Alert.alert('Connection Cancelled', 'MetaMask connection was cancelled by user.');
-      } else if (error.message?.includes('not found') || error.message?.includes('not installed')) {
-        Alert.alert(
-          'MetaMask Not Found',
-          'MetaMask Mobile is not installed on this device. Would you like to install it?',
-          [
-            {
-              text: 'Install MetaMask',
-              onPress: () => {
-                const metamaskUrl = 'https://play.google.com/store/apps/details?id=io.metamask';
-                // Linking.openURL(metamaskUrl);
-              }
-            },
-            { text: 'Cancel', style: 'cancel' }
-          ]
-        );
-      } else {
-        Alert.alert('Connection Failed', `Failed to connect to MetaMask: ${error.message || 'Unknown error'}`);
-      }
-      
+      console.error('❌ Email connection failed:', error);
+      Alert.alert('Connection Failed', `Failed to connect with Email: ${error.message || 'Unknown error'}`);
       throw error;
     }
   };
@@ -250,7 +234,7 @@ export function useKineticWallet() {
     error: null,
     
     // Actions
-    connect: connectMetaMask,
+    connect: connectWithEmail,
     connectWithGoogle,
     disconnect: disconnectWallet,
     sendTransaction: sendTransactionSafe,
